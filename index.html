@@ -1,8 +1,9 @@
 <!DOCTYPE html>
+<!-- BYDRRM Studio mobile viewport fix v1 -->
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#071225" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -26,8 +27,18 @@
       --safe-bottom: max(16px, env(safe-area-inset-bottom));
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html { background: var(--bg); }
+    html {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+      background: var(--bg);
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
     body {
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
       margin: 0;
       color: var(--text);
       background:
@@ -39,8 +50,16 @@
       padding-bottom: calc(86px + var(--safe-bottom));
     }
     button, input, select, textarea { font: inherit; }
+    img, svg, canvas { max-width: 100%; }
+    main, section, article, header, footer, nav, div { min-width: 0; }
     button { color: inherit; }
-    .app-shell { width: min(100%, 780px); margin: 0 auto; }
+    .app-shell {
+      width: 100%;
+      max-width: 780px;
+      min-width: 0;
+      margin: 0 auto;
+      overflow-x: clip;
+    }
     .app-header {
       position: sticky; top: 0; z-index: 50;
       display: flex; align-items: center; gap: 12px;
@@ -65,7 +84,7 @@
     }
     .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 4px rgba(255,176,32,.10); }
     .status-pill.online .status-dot { background: var(--success); box-shadow: 0 0 0 4px rgba(25,197,154,.12); }
-    main { padding: 14px; display: grid; gap: 14px; }
+    main { width: 100%; min-width: 0; padding: 14px; display: grid; gap: 14px; }
     .hero-card, .panel, .map-card {
       background: linear-gradient(180deg, rgba(17, 35, 66, .94), rgba(8, 21, 42, .96));
       border: 1px solid var(--line);
@@ -94,7 +113,7 @@
     input, select, textarea {
       width: 100%; color: var(--text); background: rgba(4, 12, 27, .72);
       border: 1px solid var(--line); border-radius: 12px; outline: none;
-      min-height: 44px; padding: 10px 12px;
+      min-height: 44px; padding: 10px 12px; font-size: 16px;
     }
     textarea { min-height: 86px; resize: vertical; }
     input:focus, select:focus, textarea:focus { border-color: rgba(77, 145, 255, .75); box-shadow: 0 0 0 3px rgba(45,120,255,.12); }
@@ -196,7 +215,7 @@
     .mun-row input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; padding: 0; accent-color: var(--blue); }
     .mun-name { min-width: 0; font-size: 12px; font-weight: 760; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .mun-status {
-      min-height: 35px; height: 35px; padding: 6px 8px; font-size: 10.5px; border-radius: 9px;
+      min-height: 40px; height: 40px; padding: 7px 9px; font-size: 16px; border-radius: 9px;
     }
     .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
     .export-row { display: grid; grid-template-columns: 135px 1fr; gap: 9px; margin-top: 9px; }
@@ -217,7 +236,7 @@
     .hidden { display: none !important; }
     .bottom-nav {
       position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 60;
-      width: min(100%, 780px); display: grid; grid-template-columns: repeat(3, 1fr);
+      width: 100%; max-width: 780px; display: grid; grid-template-columns: repeat(3, 1fr);
       padding: 8px 10px var(--safe-bottom);
       background: rgba(5,11,24,.94); backdrop-filter: blur(18px);
       border-top: 1px solid var(--line);
@@ -235,6 +254,11 @@
       color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: .22s; z-index: 100;
     }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (max-width: 900px), (hover: none) and (pointer: coarse) {
+      input, select, textarea, .mun-status { font-size: 16px !important; }
+      input, select, textarea { min-height: 46px; }
+      .mun-status { min-height: 44px; height: 44px; }
+    }
     @media (max-width: 540px) {
       .meta-grid { grid-template-columns: 1fr; }
       .field.full { grid-column: auto; }
@@ -1136,5 +1160,3 @@
   </script>
 </body>
 </html>
-
-<!-- Trigger BYDRRM Studio deployment -->
