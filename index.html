@@ -467,7 +467,7 @@
       <section class="hero-card">
         <div class="hero-row">
           <div>
-            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V6</span></div>
+            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V6.1</span></div>
             <div class="hero-title">WALANG <span>PASOK MAP</span></div>
             <div class="hero-desc">Select a suspension category, then tap municipalities directly on the map. The final PNG is generated on a separate high-resolution canvas, so the map keeps its proper proportions.</div>
           </div>
@@ -792,7 +792,7 @@
   googleProvider.setCustomParameters({ prompt: "select_account" });
   const BOOTSTRAP_ADMIN_EMAIL = "lomboylester.nursing@gmail.com";
 
-  const DEFAULT_SOURCE_REGISTRY_VERSION = "2026-07-13-v2-facebook";
+  const DEFAULT_SOURCE_REGISTRY_VERSION = "2026-07-13-v3-source-repair";
   const DEFAULT_OFFICIAL_SOURCES = [
     { id: "bulacan-provincial-website", municipality: "Province-wide", type: "website", name: "Provincial Government of Bulacan — Official Website", url: "https://bulacan.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "bulacan-provincial-facebook", municipality: "Province-wide", type: "facebook", name: "Provincial Government of Bulacan — Official Facebook Page", url: "https://www.facebook.com/PGBulacan/", selector: "", active: true, verification: "verified" },
@@ -831,21 +831,21 @@
     { id: "calumpit-official-website", municipality: "Calumpit", type: "website", name: "Municipality of Calumpit — Official Website", url: "https://www.calumpit.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "drt-official-website", municipality: "Doña Remedios Trinidad", type: "website", name: "Municipality of Doña Remedios Trinidad — Official Website", url: "https://drtbulacan.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "guiguinto-official-website", municipality: "Guiguinto", type: "website", name: "Municipality of Guiguinto — Official Website", url: "https://www.guiguinto.gov.ph/", selector: "", active: true, verification: "verified" },
-    { id: "hagonoy-official-website", municipality: "Hagonoy", type: "website", name: "Municipality of Hagonoy — Official Website", url: "https://www.hagonoybulacan.gov.ph/", selector: "", active: true, verification: "verified" },
+    { id: "hagonoy-official-website", municipality: "Hagonoy", type: "website", name: "Municipality of Hagonoy — eLGU Announcements", url: "https://elgu-hagonoy-bulacan-news.e.gov.ph/announcement", selector: "", active: true, verification: "verified" },
     { id: "malolos-official-website", municipality: "Malolos", type: "website", name: "City Government of Malolos — Official Website", url: "https://www.maloloscity.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "marilao-official-website", municipality: "Marilao", type: "website", name: "Municipal Government of Marilao — Official Website", url: "https://marilao.gov.ph/", selector: "", active: true, verification: "verified" },
-    { id: "meycauayan-official-website", municipality: "Meycauayan", type: "website", name: "City Government of Meycauayan — Official Website", url: "https://www.meycauayancity.gov.ph/", selector: "", active: true, verification: "verified" },
+    { id: "meycauayan-official-website", municipality: "Meycauayan", type: "website", name: "City Government of Meycauayan — Official Website", url: "https://cityofmeycauayan.org/", selector: "", active: true, verification: "verified" },
     { id: "norzagaray-official-website", municipality: "Norzagaray", type: "website", name: "Municipality of Norzagaray — Official Website", url: "https://norzagaray.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "obando-official-website", municipality: "Obando", type: "website", name: "Municipality of Obando — Official Website", url: "https://obando.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "pandi-official-website", municipality: "Pandi", type: "website", name: "Municipality of Pandi — Official Website", url: "https://pandi.bulacan.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "paombong-official-website", municipality: "Paombong", type: "website", name: "Municipality of Paombong — Official Website", url: "https://paombong.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "plaridel-official-website", municipality: "Plaridel", type: "website", name: "Municipality of Plaridel — Official Website", url: "https://plaridelbulacanlgu.ph/", selector: "", active: true, verification: "verified" },
     { id: "pulilan-official-website", municipality: "Pulilan", type: "website", name: "Municipality of Pulilan — Official Website", url: "https://pulilan.gov.ph/", selector: "", active: true, verification: "verified" },
-    { id: "san-ildefonso-government-site", municipality: "San Ildefonso", type: "website", name: "Municipal Government of San Ildefonso — Government Portal", url: "https://sanildefonso.balinkbayan.gov.ph/", selector: "", active: true, verification: "verified" },
-    { id: "sjdm-official-website", municipality: "San Jose del Monte", type: "website", name: "City of San Jose del Monte — Official Website", url: "https://csjdm.gov.ph/", selector: "", active: true, verification: "verified" },
+    { id: "san-ildefonso-government-site", municipality: "San Ildefonso", type: "website", name: "Municipal Government of San Ildefonso — Government Portal", url: "https://sanildefonso.balinkbayan.gov.ph/", selector: "", active: false, forceActive: false, verification: "temporarily_paused" },
+    { id: "sjdm-official-website", municipality: "San Jose del Monte", type: "website", name: "City of San Jose del Monte — Official Website", url: "https://csjdm.gov.ph/", selector: "", active: false, forceActive: false, verification: "temporarily_paused" },
     { id: "san-miguel-official-website", municipality: "San Miguel", type: "website", name: "Municipality of San Miguel — Official Website", url: "https://www.sanmiguelbulacan.gov.ph/", selector: "", active: true, verification: "verified" },
     { id: "san-rafael-official-website", municipality: "San Rafael", type: "website", name: "Municipality of San Rafael — Official Website", url: "https://sanrafael.gov.ph/", selector: "", active: true, verification: "verified" },
-    { id: "santa-maria-official-website", municipality: "Santa Maria", type: "website", name: "Municipality of Santa Maria — Official Website", url: "https://santamariabulacan.ph/", selector: "", active: true }
+    { id: "santa-maria-official-website", municipality: "Santa Maria", type: "website", name: "Municipality of Santa Maria — Official Backup Website", url: "https://santa-maria-bulacan.web.app/", selector: "", active: true, verification: "verified" }
   ];
 
 
@@ -1987,10 +1987,10 @@
       URL.revokeObjectURL(svgUrl);
       const link = document.createElement("a");
       const safeDate = els.date.value || "undated";
-      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v6.png`;
+      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v6.1.png`;
       link.href = canvas.toDataURL("image/png", 1);
       link.click();
-      showToast("Professional export V6 downloaded.");
+      showToast("Professional export V6.1 downloaded.");
     }
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -2206,9 +2206,11 @@
             <span class="confidence">${
               item.verification === "needs_confirmation"
                 ? "Confirm once"
-                : item.type === "facebook"
-                  ? "Official Facebook"
-                  : "Auto-check ready"
+                : item.verification === "temporarily_paused"
+                  ? "Paused • Facebook primary"
+                  : item.type === "facebook"
+                    ? "Official Facebook"
+                    : "Auto-check ready"
             }</span>
           </div>
           <div class="small-actions">
@@ -2328,6 +2330,7 @@
           if (!snapshot.exists()) {
             await setDoc(sourceRef, {
               ...source,
+              active: typeof source.forceActive === "boolean" ? source.forceActive : source.active,
               managedDefault: true,
               registryVersion: DEFAULT_SOURCE_REGISTRY_VERSION,
               createdBy: currentFirebaseUser.uid,
@@ -2346,7 +2349,9 @@
               name: source.name,
               url: source.url,
               selector: source.selector,
-              active: typeof existing.active === "boolean" ? existing.active : source.active,
+              active: typeof source.forceActive === "boolean"
+                ? source.forceActive
+                : (typeof existing.active === "boolean" ? existing.active : source.active),
               verification: source.verification || "verified",
               managedDefault: true,
               registryVersion: DEFAULT_SOURCE_REGISTRY_VERSION,
