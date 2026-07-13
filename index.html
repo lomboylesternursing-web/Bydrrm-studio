@@ -467,7 +467,7 @@
       <section class="hero-card">
         <div class="hero-row">
           <div>
-            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V6.1</span></div>
+            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V6.2</span></div>
             <div class="hero-title">WALANG <span>PASOK MAP</span></div>
             <div class="hero-desc">Select a suspension category, then tap municipalities directly on the map. The final PNG is generated on a separate high-resolution canvas, so the map keeps its proper proportions.</div>
           </div>
@@ -660,13 +660,13 @@
           <div class="cloud-status">
             <div>
               <strong id="scannerStatus">Checking scanner connection…</strong><br>
-              <span id="scannerStatusSub">Website and RSS monitoring runs every 15 minutes after Cloud Functions deployment.</span>
+              <span id="scannerStatusSub">Official websites and feeds are checked hourly through GitHub Actions.</span>
               <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
-                <span class="confidence">Web/RSS automatic</span>
-                <span class="confidence" style="background:rgba(255,176,32,.08);border-color:rgba(255,176,32,.22);color:#ffd88a">Facebook: Meta integration pending</span>
+                <span class="confidence">Hourly GitHub Actions</span>
+                <span class="confidence" style="background:rgba(255,176,32,.08);border-color:rgba(255,176,32,.22);color:#ffd88a">Facebook: manual review / Meta pending</span>
               </div>
             </div>
-            <button id="checkSourcesNow" class="secondary-btn" style="min-height:36px;padding:7px 11px;font-size:10px">Scan Sources Now</button>
+            <button id="checkSourcesNow" class="secondary-btn" style="min-height:36px;padding:7px 11px;font-size:10px">Open Scanner Dashboard</button>
           </div>
           <div id="cloudRecommendationList" class="cloud-recommendation-list"></div>
         </section>
@@ -770,9 +770,8 @@
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
   import {
     getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-    collection, query, where, onSnapshot, serverTimestamp, getDocs
+    collection, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
-  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-functions.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDQxHN4yHy4sNrezgybP_amKaOlF7MYweM",
@@ -787,7 +786,6 @@
   const firebaseApp = initializeApp(firebaseConfig);
   const auth = getAuth(firebaseApp);
   const db = getFirestore(firebaseApp);
-  const functions = getFunctions(firebaseApp, "asia-southeast1");
   const googleProvider = new GoogleAuthProvider();
   googleProvider.setCustomParameters({ prompt: "select_account" });
   const BOOTSTRAP_ADMIN_EMAIL = "lomboylester.nursing@gmail.com";
@@ -1987,10 +1985,10 @@
       URL.revokeObjectURL(svgUrl);
       const link = document.createElement("a");
       const safeDate = els.date.value || "undated";
-      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v6.1.png`;
+      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v6.2.png`;
       link.href = canvas.toDataURL("image/png", 1);
       link.click();
-      showToast("Professional export V6.1 downloaded.");
+      showToast("Professional export V6.2 downloaded.");
     }
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -2266,8 +2264,10 @@
       firebaseUnsubscribers.push(onSnapshot(recQuery, snapshot => {
         const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         renderCloudRecommendations(items);
-        els.scannerStatus.textContent = "Live recommendation inbox connected";
-        els.scannerStatusSub.textContent = "Registered sources are checked by the backend after deployment.";
+        if (profile.role !== "admin") {
+          els.scannerStatus.textContent = "Automatic recommendations active";
+          els.scannerStatusSub.textContent = "Official websites are checked hourly. New findings appear here after detection.";
+        }
       }, error => {
         console.error(error);
         els.cloudRecommendationBadge.textContent = "Connection error";
@@ -2275,28 +2275,46 @@
         els.scannerStatusSub.textContent = error.message;
       }));
 
-      firebaseUnsubscribers.push(onSnapshot(doc(db, "system_status", "source_scanner"), snapshot => {
-        if (!snapshot.exists()) {
-          els.scannerStatus.textContent = "Scanner package not deployed";
-          els.scannerStatusSub.textContent = "Deploy the included Cloud Functions package to begin scheduled website and RSS monitoring.";
-          return;
-        }
-        const status = snapshot.data();
-        const checked = status.checked ?? 0;
-        const created = status.recommendationsCreated ?? 0;
-        const skipped = status.facebookSkipped ?? 0;
-        const failed = status.failed ?? 0;
-        els.scannerStatus.textContent = status.running ? "Source scan in progress…" : "Automatic scanner active";
-        const when = status.completedAt ? toJsDate(status.completedAt).toLocaleString() : "No completed scan yet";
-        els.scannerStatusSub.textContent = `${when} • ${checked} web/RSS checked • ${created} new • ${failed} failed • ${skipped} Facebook queued for Meta`;
-      }, error => {
-        console.error(error);
-        els.scannerStatus.textContent = "Scanner status unavailable";
-        els.scannerStatusSub.textContent = error.message;
-      }));
-
       const isAdmin = profile.role === "admin";
       els.checkSourcesNow.style.display = isAdmin ? "inline-flex" : "none";
+
+      if (isAdmin) {
+        const latestScanQuery = query(
+          collection(db, "source_check_logs"),
+          orderBy("createdAt", "desc"),
+          limit(1)
+        );
+
+        firebaseUnsubscribers.push(onSnapshot(latestScanQuery, snapshot => {
+          if (snapshot.empty) {
+            els.scannerStatus.textContent = "Waiting for first scanner run";
+            els.scannerStatusSub.textContent = "Open the GitHub Actions scanner and run the baseline workflow once.";
+            return;
+          }
+
+          const status = snapshot.docs[0].data();
+          const checked = status.checked ?? 0;
+          const created = status.recommendationsCreated ?? 0;
+          const skipped = status.facebookSkipped ?? 0;
+          const failed = status.failed ?? 0;
+          const when = status.createdAt
+            ? toJsDate(status.createdAt).toLocaleString()
+            : "Latest run";
+
+          els.scannerStatus.textContent =
+            failed === 0 ? "Automatic scanner healthy" : "Scanner needs attention";
+
+          els.scannerStatusSub.textContent =
+            `${when} • ${checked} websites checked • ${created} new • ${failed} failed • ${skipped} Facebook sources pending Meta`;
+        }, error => {
+          console.error(error);
+          els.scannerStatus.textContent = "Scanner status unavailable";
+          els.scannerStatusSub.textContent = error.message;
+        }));
+      } else {
+        els.scannerStatus.textContent = "Automatic recommendations active";
+        els.scannerStatusSub.textContent = "Official websites are checked hourly. New findings appear here after detection.";
+      }
 
       if (isAdmin) {
         firebaseUnsubscribers.push(onSnapshot(collection(db, "source_registry"), snapshot =>
@@ -2403,30 +2421,17 @@
       showToast("Official source saved.");
     }
 
-    async function checkSourcesNow() {
+    function checkSourcesNow() {
       if (!currentFirebaseProfile || currentFirebaseProfile.role !== "admin") {
-        showToast("Only an administrator can start a manual source scan.");
+        showToast("Only an administrator can open the scanner dashboard.");
         return;
       }
-      els.checkSourcesNow.disabled = true;
-      els.checkSourcesNow.textContent = "Checking…";
-      try {
-        const callable = httpsCallable(functions, "checkSourcesNow");
-        const result = await callable({ includeCurrent: true });
-        const checked = result.data?.checked ?? 0;
-        const found = result.data?.recommendationsCreated ?? 0;
-        const skipped = result.data?.facebookSkipped ?? 0;
-        const failed = result.data?.failed ?? 0;
-        showToast(`Scan complete: ${checked} web/RSS checked, ${found} new, ${failed} failed, ${skipped} Facebook pending Meta access.`);
-      } catch (error) {
-        console.error(error);
-        showToast(error.message?.includes("not-found")
-          ? "The automatic scanner has not been deployed yet."
-          : "Unable to check sources right now.");
-      } finally {
-        els.checkSourcesNow.disabled = false;
-        els.checkSourcesNow.textContent = "Scan Sources Now";
-      }
+
+      window.open(
+        "https://github.com/lomboylesternursing-web/Bydrrm-studio/actions/workflows/bydrrm-source-scanner.yml",
+        "_blank",
+        "noopener"
+      );
     }
 
     function initializeFirebaseAccess() {
