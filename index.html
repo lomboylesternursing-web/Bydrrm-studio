@@ -8,6 +8,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>BYDRRM Studio</title>
+
+  <meta name="application-name" content="BYDRRM Studio" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="BYDRRM Studio" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="48x48" href="./favicon-48.png" />
+
   <style>
     :root {
       --bg: #050b18;
@@ -425,6 +434,48 @@
       .auth-card { padding: 20px; }
     }
 
+
+    .pwa-install-button {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 36px;
+      padding: 7px 12px;
+      border: 1px solid rgba(111,174,255,.28);
+      border-radius: 999px;
+      color: #eff6ff;
+      background: linear-gradient(145deg, rgba(40,118,255,.92), rgba(25,70,170,.90));
+      box-shadow: 0 8px 18px rgba(31,95,220,.22);
+      font-size: 10px;
+      font-weight: 850;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pwa-install-button.visible { display: inline-flex; }
+    .pwa-install-button svg {
+      width: 15px;
+      height: 15px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .auth-install-button {
+      width: 100%;
+      margin-top: 9px;
+      min-height: 44px;
+      font-size: 12px;
+    }
+    @media (display-mode: standalone) {
+      .pwa-install-button { display: none !important; }
+    }
+    @media (max-width: 520px) {
+      #headerInstallApp span { display: none; }
+      #headerInstallApp { width: 35px; padding: 7px; }
+    }
+
   </style>
 </head>
 <body>
@@ -437,6 +488,12 @@
       <p id="authMessage" class="auth-message">Sign in with your approved Google account. New accounts will be sent to the BYDRRM administrator for one-time approval.</p>
       <button id="googleSignIn" class="primary-btn" style="width:100%">Continue with Google</button>
       <button id="authSignOut" class="secondary-btn firebase-hidden" style="width:100%;margin-top:9px">Sign out</button>
+      <button id="authInstallApp" class="pwa-install-button auth-install-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M12 3v12m0 0 4-4m-4 4-4-4"/>
+  <path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>
+</svg><span>Install BYDRRM Studio</span>
+      </button>
       <div id="authMeta" class="auth-meta">Firebase connection is being initialized…</div>
     </section>
   </div>
@@ -451,6 +508,13 @@
       <div id="connectionPill" class="status-pill">
         <span class="status-dot"></span><span id="connectionText">Loading map</span>
       </div>
+
+      <button id="headerInstallApp" class="pwa-install-button" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M12 3v12m0 0 4-4m-4 4-4-4"/>
+  <path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>
+</svg><span>Install</span>
+      </button>
 
       <div id="userChip" class="user-chip">
         <img id="userAvatar" class="user-avatar" alt="" />
@@ -467,7 +531,7 @@
       <section class="hero-card">
         <div class="hero-row">
           <div>
-            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V6.2</span></div>
+            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">PWA V7</span></div>
             <div class="hero-title">WALANG <span>PASOK MAP</span></div>
             <div class="hero-desc">Select a suspension category, then tap municipalities directly on the map. The final PNG is generated on a separate high-resolution canvas, so the map keeps its proper proportions.</div>
           </div>
@@ -1985,10 +2049,10 @@
       URL.revokeObjectURL(svgUrl);
       const link = document.createElement("a");
       const safeDate = els.date.value || "undated";
-      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v6.2.png`;
+      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v7.png`;
       link.href = canvas.toDataURL("image/png", 1);
       link.click();
-      showToast("Professional export V6.2 downloaded.");
+      showToast("Professional export V7 downloaded.");
     }
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -2503,6 +2567,98 @@
     }
 
 
+
+    let deferredInstallPrompt = null;
+
+    function isStandaloneApp() {
+      return window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;
+    }
+
+    function setInstallButtonsVisible(visible) {
+      ["authInstallApp", "headerInstallApp"].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.classList.toggle("visible", visible && !isStandaloneApp());
+      });
+    }
+
+    async function installBydrrmApp() {
+      if (isStandaloneApp()) {
+        showToast("BYDRRM Studio is already installed.");
+        return;
+      }
+
+      if (!deferredInstallPrompt) {
+        const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        showToast(
+          isiOS
+            ? "Use Share, then choose Add to Home Screen."
+            : "Open the browser menu and choose Add to Home screen or Install app."
+        );
+        return;
+      }
+
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      setInstallButtonsVisible(false);
+
+      if (choice.outcome === "accepted") {
+        showToast("Installing BYDRRM Studio…");
+      }
+    }
+
+    function initializePwa() {
+      const authButton = document.getElementById("authInstallApp");
+      const headerButton = document.getElementById("headerInstallApp");
+
+      authButton?.addEventListener("click", installBydrrmApp);
+      headerButton?.addEventListener("click", installBydrrmApp);
+
+      window.addEventListener("beforeinstallprompt", event => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        setInstallButtonsVisible(true);
+      });
+
+      window.addEventListener("appinstalled", () => {
+        deferredInstallPrompt = null;
+        setInstallButtonsVisible(false);
+        showToast("BYDRRM Studio is installed.");
+      });
+
+      if (!isStandaloneApp() && /iphone|ipad|ipod/i.test(navigator.userAgent)) {
+        setInstallButtonsVisible(true);
+      }
+
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", async () => {
+          try {
+            const registration = await navigator.serviceWorker.register(
+              "./service-worker.js",
+              { scope: "./" }
+            );
+
+            // Check for a new version whenever the app opens.
+            registration.update().catch(() => {});
+
+            registration.addEventListener("updatefound", () => {
+              const worker = registration.installing;
+              if (!worker) return;
+
+              worker.addEventListener("statechange", () => {
+                if (worker.state === "installed" && navigator.serviceWorker.controller) {
+                  showToast("A BYDRRM Studio update is ready. Reopen the app to apply it.");
+                }
+              });
+            });
+          } catch (error) {
+            console.error("Service worker registration failed:", error);
+          }
+        });
+      }
+    }
+
     function bindEvents() {
       document.querySelectorAll(".mode-tab").forEach(btn => btn.addEventListener("click", () => setMode(btn.dataset.mode)));
       document.querySelectorAll(".nav-btn[data-nav]").forEach(btn => btn.addEventListener("click", () => setMode(btn.dataset.nav)));
@@ -2566,6 +2722,7 @@
 
     init();
     initializeFirebaseAccess();
+    initializePwa();
   })();
   </script>
 </body>

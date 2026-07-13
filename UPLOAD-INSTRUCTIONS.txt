@@ -1,0 +1,22 @@
+BYDRRM STUDIO PWA V7
+
+Upload all files in this folder to the ROOT of the GitHub repository:
+- index.html
+- manifest.webmanifest
+- service-worker.js
+- icon-192.png
+- icon-512.png
+- maskable-512.png
+- apple-touch-icon.png
+- favicon-48.png
+
+Do not upload the ZIP itself as the website.
+
+After GitHub Pages deployment becomes green:
+1. Open the live BYDRRM Studio site in Chrome.
+2. Sign in normally.
+3. Tap Install in the app header, or use Chrome menu > Add to Home screen / Install app.
+4. The installed app opens in standalone mode with its own BYDRRM icon.
+
+Internet is still required for Google sign-in, Firestore, official-source recommendations,
+and the GitHub Actions scanner. The service worker caches the app shell for faster reopening.
