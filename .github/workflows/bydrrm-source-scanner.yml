@@ -1,0 +1,638 @@
+name: BYDRRM Official Source Scanner
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+      timezone: "Asia/Manila"
+
+  workflow_dispatch:
+    inputs:
+      include_current:
+        description: "Include current matching announcements during testing"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bydrrm-source-scanner
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      INCLUDE_CURRENT: ${{ github.event_name == 'workflow_dispatch' && inputs.include_current || false }}
+
+    steps:
+      - name: Check Firebase secret
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Missing FIREBASE_SERVICE_ACCOUNT repository secret"
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install scanner packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/bydrrm-scanner"
+          cd "$RUNNER_TEMP/bydrrm-scanner"
+          npm init -y >/dev/null 2>&1
+          npm install firebase-admin cheerio --no-audit --no-fund
+
+      - name: Scan official sources
+        run: |
+          cd "$RUNNER_TEMP/bydrrm-scanner"
+
+          cat > scanner.cjs <<'NODE'
+          "use strict";
+
+          const { initializeApp, cert } = require("firebase-admin/app");
+          const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+          const cheerio = require("cheerio");
+          const crypto = require("node:crypto");
+
+          const credentials = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+          initializeApp({ credential: cert(credentials) });
+          const db = getFirestore();
+
+          const includeCurrent =
+            String(process.env.INCLUDE_CURRENT).toLowerCase() === "true";
+
+          const terms = [
+            "class suspension",
+            "suspension of classes",
+            "classes are suspended",
+            "classes will be suspended",
+            "no classes",
+            "walang pasok",
+            "suspendido ang klase",
+            "suspension ng klase",
+            "suspensyon ng klase"
+          ];
+
+          const normalize = (value) =>
+            String(value || "")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase()
+              .replace(/&/g, " and ")
+              .replace(/[^a-z0-9]+/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+
+          const hasSuspension = (text) => {
+            const normalized = normalize(text);
+
+            return terms.some((term) =>
+              normalized.includes(normalize(term))
+            );
+          };
+
+          const hash = (value) =>
+            crypto
+              .createHash("sha256")
+              .update(String(value))
+              .digest("hex");
+
+          const absoluteUrl = (base, href) => {
+            try {
+              return new URL(href || base, base).toString();
+            } catch {
+              return base;
+            }
+          };
+
+          function detectCategory(text) {
+            const value = normalize(text);
+            const has = (pattern) => pattern.test(value);
+
+            const both = has(
+              /public and private|both public and private|publiko at pribado/
+            );
+
+            const publicOnly = has(
+              /public schools? only|public school only|public only|pampublikong paaralan lamang/
+            );
+
+            const allLevels = has(
+              /all levels|all grade levels|lahat ng antas|lahat ng level|kinder(?:garten)? to college|preschool to college/
+            );
+
+            const upToShs = has(
+              /up to senior high|until senior high|elementary to senior high|kinder(?:garten)? to grade 12|preschool to grade 12/
+            );
+
+            const upToElem = has(
+              /up to elementary|until elementary|preschool to elementary|kinder(?:garten)? to grade 6|elementary level/
+            );
+
+            const governmentWork = has(
+              /government work|government offices|trabaho sa gobyerno|tanggapan ng pamahalaan/
+            );
+
+            if (governmentWork && hasSuspension(value)) {
+              return "classes-work";
+            }
+
+            if (allLevels && both) return "all-both";
+            if (allLevels && publicOnly) return "all-public";
+            if (upToShs && both) return "shs-both";
+            if (upToShs && publicOnly) return "shs-public";
+            if (upToElem && both) return "elem-both";
+            if (upToElem && publicOnly) return "elem-public";
+
+            return "custom";
+          }
+
+          function confidence(category, text) {
+            const length = normalize(text).length;
+
+            if (category !== "custom" && length >= 70) {
+              return "High";
+            }
+
+            if (category !== "custom" || length >= 45) {
+              return "Medium";
+            }
+
+            return "Low";
+          }
+
+          function unique(entries) {
+            const seen = new Set();
+
+            return entries
+              .filter((entry) => {
+                const key = hash(
+                  `${normalize(entry.text)}|${entry.link}`
+                );
+
+                if (seen.has(key)) return false;
+
+                seen.add(key);
+                return true;
+              })
+              .slice(0, 30);
+          }
+
+          function parseFeed(raw, source) {
+            const $ = cheerio.load(raw, {
+              xmlMode: true
+            });
+
+            const entries = [];
+
+            $("item, entry")
+              .slice(0, 30)
+              .each((_, element) => {
+                const node = $(element);
+
+                const title = node
+                  .find("title")
+                  .first()
+                  .text()
+                  .trim();
+
+                const body = node
+                  .find(
+                    "description, summary, content, content\\:encoded"
+                  )
+                  .first()
+                  .text()
+                  .trim();
+
+                const linkNode = node
+                  .find("link")
+                  .first();
+
+                const href =
+                  linkNode.attr("href") ||
+                  linkNode.text().trim();
+
+                const text = `${title}\n${body}`
+                  .replace(/\s+/g, " ")
+                  .trim();
+
+                if (text.length >= 30) {
+                  entries.push({
+                    text,
+                    link: absoluteUrl(source.url, href)
+                  });
+                }
+              });
+
+            return unique(entries);
+          }
+
+          function parseWebsite(raw, source) {
+            const $ = cheerio.load(raw);
+
+            $(
+              "script, style, noscript, svg, iframe"
+            ).remove();
+
+            const selected = source.selector
+              ? $(source.selector).first()
+              : null;
+
+            const root =
+              selected && selected.length
+                ? selected
+                : $("main").first().length
+                  ? $("main").first()
+                  : $("body");
+
+            const entries = [];
+
+            const selectors =
+              "article,.post,.news-item,.news,.entry,.announcement,.advisory,.card,.item,li";
+
+            root
+              .find(selectors)
+              .slice(0, 100)
+              .each((_, element) => {
+                const node = $(element);
+
+                const text = node
+                  .text()
+                  .replace(/\s+/g, " ")
+                  .trim();
+
+                if (
+                  text.length < 35 ||
+                  !hasSuspension(text)
+                ) {
+                  return;
+                }
+
+                entries.push({
+                  text: text.slice(0, 2200),
+                  link: absoluteUrl(
+                    source.url,
+                    node
+                      .find("a[href]")
+                      .first()
+                      .attr("href")
+                  )
+                });
+              });
+
+            if (!entries.length) {
+              root
+                .find("p,div")
+                .slice(0, 500)
+                .each((_, element) => {
+                  const node = $(element);
+
+                  const text = node
+                    .clone()
+                    .children()
+                    .remove()
+                    .end()
+                    .text()
+                    .replace(/\s+/g, " ")
+                    .trim();
+
+                  if (
+                    text.length < 35 ||
+                    text.length > 1800 ||
+                    !hasSuspension(text)
+                  ) {
+                    return;
+                  }
+
+                  entries.push({
+                    text,
+                    link: absoluteUrl(
+                      source.url,
+                      node
+                        .find("a[href]")
+                        .first()
+                        .attr("href")
+                    )
+                  });
+                });
+            }
+
+            return unique(entries);
+          }
+
+          async function fetchEntries(source) {
+            if (source.type === "facebook") {
+              return {
+                skipped: true,
+                entries: []
+              };
+            }
+
+            const controller = new AbortController();
+
+            const timeout = setTimeout(
+              () => controller.abort(),
+              25000
+            );
+
+            try {
+              const response = await fetch(source.url, {
+                signal: controller.signal,
+                redirect: "follow",
+                headers: {
+                  "user-agent":
+                    "BYDRRM-Studio-Monitor/1.0",
+                  "accept-language":
+                    "en-PH,en;q=0.9,fil;q=0.8"
+                }
+              });
+
+              if (!response.ok) {
+                throw new Error(
+                  `HTTP ${response.status}`
+                );
+              }
+
+              const raw = await response.text();
+
+              const entries =
+                source.type === "rss"
+                  ? parseFeed(raw, source)
+                  : parseWebsite(raw, source);
+
+              return {
+                skipped: false,
+                entries
+              };
+            } finally {
+              clearTimeout(timeout);
+            }
+          }
+
+          async function createRecommendation(
+            source,
+            entry,
+            contentHash
+          ) {
+            const ref = db
+              .collection("recommendations")
+              .doc(contentHash);
+
+            if ((await ref.get()).exists) {
+              return false;
+            }
+
+            const category = detectCategory(
+              entry.text
+            );
+
+            await ref.set({
+              municipality: source.municipality,
+              category,
+              confidence: confidence(
+                category,
+                entry.text
+              ),
+              sourceId: source.id,
+              sourceName:
+                source.name ||
+                source.municipality,
+              sourceType: source.type,
+              sourceUrl:
+                entry.link ||
+                source.url,
+              excerpt: entry.text.slice(
+                0,
+                1000
+              ),
+              contentHash,
+              status: "pending",
+              scanner: "github-actions",
+              createdAt:
+                FieldValue.serverTimestamp()
+            });
+
+            return true;
+          }
+
+          async function main() {
+            const snapshot = await db
+              .collection("source_registry")
+              .where("active", "==", true)
+              .get();
+
+            let checked = 0;
+            let created = 0;
+            let skippedFacebook = 0;
+            let failed = 0;
+
+            for (const doc of snapshot.docs) {
+              const source = {
+                id: doc.id,
+                ...doc.data()
+              };
+
+              try {
+                const result =
+                  await fetchEntries(source);
+
+                if (result.skipped) {
+                  skippedFacebook += 1;
+
+                  await doc.ref.set(
+                    {
+                      lastCheckAt:
+                        FieldValue.serverTimestamp(),
+                      lastCheckStatus:
+                        "meta_api_required"
+                    },
+                    {
+                      merge: true
+                    }
+                  );
+
+                  continue;
+                }
+
+                checked += 1;
+
+                const hashes =
+                  result.entries.map((entry) =>
+                    hash(
+                      `${source.id}|${normalize(
+                        entry.text
+                      )}|${entry.link}`
+                    )
+                  );
+
+                const known =
+                  Array.isArray(
+                    source.knownHashes
+                  )
+                    ? source.knownHashes
+                    : [];
+
+                const knownSet =
+                  new Set(known);
+
+                const firstRun =
+                  source.baselineComplete !==
+                  true;
+
+                let sourceCreated = 0;
+
+                for (
+                  let index = 0;
+                  index <
+                  result.entries.length;
+                  index += 1
+                ) {
+                  const contentHash =
+                    hashes[index];
+
+                  if (
+                    knownSet.has(
+                      contentHash
+                    )
+                  ) {
+                    continue;
+                  }
+
+                  if (
+                    firstRun &&
+                    !includeCurrent
+                  ) {
+                    continue;
+                  }
+
+                  const wasCreated =
+                    await createRecommendation(
+                      source,
+                      result.entries[index],
+                      contentHash
+                    );
+
+                  if (wasCreated) {
+                    created += 1;
+                    sourceCreated += 1;
+                  }
+                }
+
+                await doc.ref.set(
+                  {
+                    baselineComplete: true,
+
+                    knownHashes: [
+                      ...new Set([
+                        ...hashes,
+                        ...known
+                      ])
+                    ].slice(0, 120),
+
+                    lastCheckAt:
+                      FieldValue.serverTimestamp(),
+
+                    lastCheckStatus: "ok",
+
+                    lastMatchCount:
+                      result.entries.length,
+
+                    lastNewCount:
+                      sourceCreated,
+
+                    lastError:
+                      FieldValue.delete(),
+
+                    scanner:
+                      "github-actions"
+                  },
+                  {
+                    merge: true
+                  }
+                );
+              } catch (error) {
+                failed += 1;
+
+                await doc.ref.set(
+                  {
+                    lastCheckAt:
+                      FieldValue.serverTimestamp(),
+
+                    lastCheckStatus:
+                      "error",
+
+                    lastError: String(
+                      error.message ||
+                      error
+                    ).slice(0, 500),
+
+                    scanner:
+                      "github-actions"
+                  },
+                  {
+                    merge: true
+                  }
+                );
+              }
+            }
+
+            await db
+              .collection(
+                "source_check_logs"
+              )
+              .add({
+                checked,
+
+                recommendationsCreated:
+                  created,
+
+                facebookSkipped:
+                  skippedFacebook,
+
+                failed,
+
+                includeCurrent,
+
+                scanner:
+                  "github-actions",
+
+                createdAt:
+                  FieldValue.serverTimestamp()
+              });
+
+            console.log(
+              JSON.stringify(
+                {
+                  success: true,
+                  checked,
+
+                  recommendationsCreated:
+                    created,
+
+                  facebookSkipped:
+                    skippedFacebook,
+
+                  failed,
+
+                  includeCurrent
+                },
+                null,
+                2
+              )
+            );
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exitCode = 1;
+          });
+          NODE
+
+          node scanner.cjs
