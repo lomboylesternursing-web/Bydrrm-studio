@@ -2,13 +2,14 @@ name: BYDRRM Official Source Scanner
 
 on:
   schedule:
+    # Runs every hour at minute 17.
+    # GitHub cron uses UTC, but minute :17 is also :17 in Philippine time.
     - cron: "17 * * * *"
-      timezone: "Asia/Manila"
 
   workflow_dispatch:
     inputs:
       include_current:
-        description: "Include current matching announcements during testing"
+        description: "Create recommendations from current matching posts (use only for testing)"
         required: true
         default: false
         type: boolean
@@ -22,6 +23,7 @@ concurrency:
 
 jobs:
   scan:
+    name: Scan official websites and feeds
     runs-on: ubuntu-latest
     timeout-minutes: 12
 
@@ -30,10 +32,11 @@ jobs:
       INCLUDE_CURRENT: ${{ github.event_name == 'workflow_dispatch' && inputs.include_current || false }}
 
     steps:
-      - name: Check Firebase secret
+      - name: Validate Firebase secret
+        shell: bash
         run: |
           if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
-            echo "::error::Missing FIREBASE_SERVICE_ACCOUNT repository secret"
+            echo "::error::Missing repository secret FIREBASE_SERVICE_ACCOUNT"
             exit 1
           fi
 
@@ -42,14 +45,16 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install scanner packages
+      - name: Install scanner dependencies
+        shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/bydrrm-scanner"
           cd "$RUNNER_TEMP/bydrrm-scanner"
           npm init -y >/dev/null 2>&1
-          npm install firebase-admin cheerio --no-audit --no-fund
+          npm install firebase-admin@latest cheerio@latest --no-audit --no-fund
 
-      - name: Scan official sources
+      - name: Run BYDRRM source scanner
+        shell: bash
         run: |
           cd "$RUNNER_TEMP/bydrrm-scanner"
 
@@ -61,14 +66,34 @@ jobs:
           const cheerio = require("cheerio");
           const crypto = require("node:crypto");
 
-          const credentials = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-          initializeApp({ credential: cert(credentials) });
+          const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+          if (!serviceAccountJson) {
+            throw new Error("FIREBASE_SERVICE_ACCOUNT is missing.");
+          }
+
+          let serviceAccount;
+
+          try {
+            serviceAccount = JSON.parse(serviceAccountJson);
+          } catch (error) {
+            throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON.");
+          }
+
+          initializeApp({
+            credential: cert(serviceAccount)
+          });
+
           const db = getFirestore();
 
-          const includeCurrent =
+          const INCLUDE_CURRENT =
             String(process.env.INCLUDE_CURRENT).toLowerCase() === "true";
 
-          const terms = [
+          const MAX_KNOWN_HASHES = 120;
+          const MAX_ENTRIES_PER_SOURCE = 24;
+          const FETCH_TIMEOUT_MS = 25000;
+
+          const SUSPENSION_TERMS = [
             "class suspension",
             "suspension of classes",
             "classes are suspended",
@@ -77,11 +102,13 @@ jobs:
             "walang pasok",
             "suspendido ang klase",
             "suspension ng klase",
-            "suspensyon ng klase"
+            "suspensyon ng klase",
+            "face-to-face classes are suspended",
+            "onsite classes are suspended"
           ];
 
-          const normalize = (value) =>
-            String(value || "")
+          function normalizeText(value) {
+            return String(value || "")
               .normalize("NFD")
               .replace(/[\u0300-\u036f]/g, "")
               .toLowerCase()
@@ -89,103 +116,143 @@ jobs:
               .replace(/[^a-z0-9]+/g, " ")
               .replace(/\s+/g, " ")
               .trim();
+          }
 
-          const hasSuspension = (text) => {
-            const normalized = normalize(text);
+          function containsSuspensionLanguage(text) {
+            const normalized = normalizeText(text);
 
-            return terms.some((term) =>
-              normalized.includes(normalize(term))
+            return SUSPENSION_TERMS.some((term) =>
+              normalized.includes(normalizeText(term))
             );
-          };
-
-          const hash = (value) =>
-            crypto
-              .createHash("sha256")
-              .update(String(value))
-              .digest("hex");
-
-          const absoluteUrl = (base, href) => {
-            try {
-              return new URL(href || base, base).toString();
-            } catch {
-              return base;
-            }
-          };
+          }
 
           function detectCategory(text) {
-            const value = normalize(text);
+            const value = normalizeText(text);
             const has = (pattern) => pattern.test(value);
 
             const both = has(
-              /public and private|both public and private|publiko at pribado/
+              /public and private|both public and private|public private|pampubliko at pribado|publiko at pribado/
             );
 
             const publicOnly = has(
-              /public schools? only|public school only|public only|pampublikong paaralan lamang/
+              /public schools? only|public school only|pampublikong paaralan lamang|public only/
             );
 
             const allLevels = has(
-              /all levels|all grade levels|lahat ng antas|lahat ng level|kinder(?:garten)? to college|preschool to college/
+              /all levels|all grade levels|lahat ng antas|lahat ng level|kindergarten to college|kinder to college|preschool to college/
             );
 
             const upToShs = has(
-              /up to senior high|until senior high|elementary to senior high|kinder(?:garten)? to grade 12|preschool to grade 12/
+              /up to senior high|until senior high|elementary to senior high|kindergarten to grade 12|kinder to grade 12|preschool to grade 12|senior high school/
             );
 
             const upToElem = has(
-              /up to elementary|until elementary|preschool to elementary|kinder(?:garten)? to grade 6|elementary level/
+              /up to elementary|until elementary|preschool to elementary|kindergarten to grade 6|kinder to grade 6|elementary level/
             );
 
             const governmentWork = has(
-              /government work|government offices|trabaho sa gobyerno|tanggapan ng pamahalaan/
+              /government work|work in government offices|government offices|pasok sa mga tanggapan ng pamahalaan|trabaho sa gobyerno/
             );
 
-            if (governmentWork && hasSuspension(value)) {
+            if (
+              governmentWork &&
+              containsSuspensionLanguage(value)
+            ) {
               return "classes-work";
             }
 
-            if (allLevels && both) return "all-both";
-            if (allLevels && publicOnly) return "all-public";
-            if (upToShs && both) return "shs-both";
-            if (upToShs && publicOnly) return "shs-public";
-            if (upToElem && both) return "elem-both";
-            if (upToElem && publicOnly) return "elem-public";
+            if (allLevels && both) {
+              return "all-both";
+            }
+
+            if (allLevels && publicOnly) {
+              return "all-public";
+            }
+
+            if (upToShs && both) {
+              return "shs-both";
+            }
+
+            if (upToShs && publicOnly) {
+              return "shs-public";
+            }
+
+            if (upToElem && both) {
+              return "elem-both";
+            }
+
+            if (upToElem && publicOnly) {
+              return "elem-public";
+            }
 
             return "custom";
           }
 
-          function confidence(category, text) {
-            const length = normalize(text).length;
+          function confidenceFor(category, text) {
+            const length = normalizeText(text).length;
 
-            if (category !== "custom" && length >= 70) {
+            if (
+              category !== "custom" &&
+              length >= 70
+            ) {
               return "High";
             }
 
-            if (category !== "custom" || length >= 45) {
+            if (
+              category !== "custom" ||
+              length >= 45
+            ) {
               return "Medium";
             }
 
             return "Low";
           }
 
-          function unique(entries) {
-            const seen = new Set();
-
-            return entries
-              .filter((entry) => {
-                const key = hash(
-                  `${normalize(entry.text)}|${entry.link}`
-                );
-
-                if (seen.has(key)) return false;
-
-                seen.add(key);
-                return true;
-              })
-              .slice(0, 30);
+          function sha256(value) {
+            return crypto
+              .createHash("sha256")
+              .update(String(value))
+              .digest("hex");
           }
 
-          function parseFeed(raw, source) {
+          function absoluteUrl(base, href) {
+            try {
+              return new URL(
+                href || base,
+                base
+              ).toString();
+            } catch {
+              return base;
+            }
+          }
+
+          function uniqueEntries(entries) {
+            const seen = new Set();
+            const result = [];
+
+            for (const entry of entries) {
+              const key = sha256(
+                `${normalizeText(entry.text)}|${entry.link || ""}`
+              );
+
+              if (seen.has(key)) {
+                continue;
+              }
+
+              seen.add(key);
+              result.push(entry);
+
+              if (
+                result.length >= MAX_ENTRIES_PER_SOURCE
+              ) {
+                break;
+              }
+            }
+
+            return result;
+          }
+
+          function parseFeed(raw, baseUrl) {
             const $ = cheerio.load(raw, {
               xmlMode: true
             });
@@ -193,7 +260,7 @@ jobs:
             const entries = [];
 
             $("item, entry")
-              .slice(0, 30)
+              .slice(0, MAX_ENTRIES_PER_SOURCE)
               .each((_, element) => {
                 const node = $(element);
 
@@ -203,7 +270,7 @@ jobs:
                   .text()
                   .trim();
 
-                const body = node
+                const description = node
                   .find(
                     "description, summary, content, content\\:encoded"
                   )
@@ -219,19 +286,32 @@ jobs:
                   linkNode.attr("href") ||
                   linkNode.text().trim();
 
-                const text = `${title}\n${body}`
+                const published = node
+                  .find(
+                    "pubDate, published, updated"
+                  )
+                  .first()
+                  .text()
+                  .trim();
+
+                const text = `${title}\n${description}`
                   .replace(/\s+/g, " ")
                   .trim();
 
-                if (text.length >= 30) {
+                if (text.length >= 25) {
                   entries.push({
+                    title,
                     text,
-                    link: absoluteUrl(source.url, href)
+                    link: absoluteUrl(
+                      baseUrl,
+                      href
+                    ),
+                    published
                   });
                 }
               });
 
-            return unique(entries);
+            return uniqueEntries(entries);
           }
 
           function parseWebsite(raw, source) {
@@ -241,25 +321,37 @@ jobs:
               "script, style, noscript, svg, iframe"
             ).remove();
 
-            const selected = source.selector
+            const selectedRoot = source.selector
               ? $(source.selector).first()
               : null;
 
             const root =
-              selected && selected.length
-                ? selected
+              selectedRoot &&
+              selectedRoot.length
+                ? selectedRoot
                 : $("main").first().length
                   ? $("main").first()
                   : $("body");
 
             const entries = [];
 
-            const selectors =
-              "article,.post,.news-item,.news,.entry,.announcement,.advisory,.card,.item,li";
+            const selectors = [
+              "article",
+              ".post",
+              ".news-item",
+              ".news",
+              ".entry",
+              ".announcement",
+              ".advisory",
+              ".card",
+              ".blog-post",
+              ".item",
+              "li"
+            ].join(",");
 
             root
               .find(selectors)
-              .slice(0, 100)
+              .slice(0, 80)
               .each((_, element) => {
                 const node = $(element);
 
@@ -270,27 +362,40 @@ jobs:
 
                 if (
                   text.length < 35 ||
-                  !hasSuspension(text)
+                  !containsSuspensionLanguage(text)
                 ) {
                   return;
                 }
 
+                const title = node
+                  .find(
+                    "h1,h2,h3,h4,h5,strong"
+                  )
+                  .first()
+                  .text()
+                  .replace(/\s+/g, " ")
+                  .trim();
+
+                const href = node
+                  .find("a[href]")
+                  .first()
+                  .attr("href");
+
                 entries.push({
+                  title,
                   text: text.slice(0, 2200),
                   link: absoluteUrl(
                     source.url,
-                    node
-                      .find("a[href]")
-                      .first()
-                      .attr("href")
-                  )
+                    href
+                  ),
+                  published: ""
                 });
               });
 
             if (!entries.length) {
               root
-                .find("p,div")
-                .slice(0, 500)
+                .find("p, div")
+                .slice(0, 400)
                 .each((_, element) => {
                   const node = $(element);
 
@@ -305,54 +410,99 @@ jobs:
 
                   if (
                     text.length < 35 ||
-                    text.length > 1800 ||
-                    !hasSuspension(text)
+                    text.length > 2200 ||
+                    !containsSuspensionLanguage(text)
                   ) {
                     return;
                   }
 
+                  const parent = node.closest(
+                    "article, section, .post, .news, .entry, .card"
+                  );
+
+                  const context = parent.length
+                    ? parent
+                        .text()
+                        .replace(/\s+/g, " ")
+                        .trim()
+                    : text;
+
+                  const href = (
+                    parent.length
+                      ? parent
+                      : node
+                  )
+                    .find("a[href]")
+                    .first()
+                    .attr("href");
+
                   entries.push({
-                    text,
+                    title: (
+                      parent.length
+                        ? parent
+                        : node
+                    )
+                      .find(
+                        "h1,h2,h3,h4,strong"
+                      )
+                      .first()
+                      .text()
+                      .trim(),
+
+                    text: context.slice(
+                      0,
+                      2200
+                    ),
+
                     link: absoluteUrl(
                       source.url,
-                      node
-                        .find("a[href]")
-                        .first()
-                        .attr("href")
-                    )
+                      href
+                    ),
+
+                    published: ""
                   });
                 });
             }
 
-            return unique(entries);
+            return uniqueEntries(entries);
           }
 
-          async function fetchEntries(source) {
+          async function fetchSource(source) {
             if (source.type === "facebook") {
               return {
                 skipped: true,
+                reason: "meta_api_required",
                 entries: []
               };
             }
 
-            const controller = new AbortController();
+            const controller =
+              new AbortController();
 
             const timeout = setTimeout(
               () => controller.abort(),
-              25000
+              FETCH_TIMEOUT_MS
             );
 
             try {
-              const response = await fetch(source.url, {
-                signal: controller.signal,
-                redirect: "follow",
-                headers: {
-                  "user-agent":
-                    "BYDRRM-Studio-Monitor/1.0",
-                  "accept-language":
-                    "en-PH,en;q=0.9,fil;q=0.8"
+              const response = await fetch(
+                source.url,
+                {
+                  signal: controller.signal,
+                  redirect: "follow",
+
+                  headers: {
+                    "user-agent":
+                      "BYDRRM-Studio-Monitor/6.1 (+official public-information monitoring)",
+
+                    accept:
+                      "text/html,application/rss+xml,application/atom+xml,application/xml;q=0.9,*/*;q=0.8",
+
+                    "accept-language":
+                      "en-PH,en;q=0.9,fil;q=0.8"
+                  }
                 }
-              });
+              );
 
               if (!response.ok) {
                 throw new Error(
@@ -364,8 +514,14 @@ jobs:
 
               const entries =
                 source.type === "rss"
-                  ? parseFeed(raw, source)
-                  : parseWebsite(raw, source);
+                  ? parseFeed(
+                      raw,
+                      source.url
+                    )
+                  : parseWebsite(
+                      raw,
+                      source
+                    );
 
               return {
                 skipped: false,
@@ -385,36 +541,57 @@ jobs:
               .collection("recommendations")
               .doc(contentHash);
 
-            if ((await ref.get()).exists) {
+            const existing = await ref.get();
+
+            if (existing.exists) {
               return false;
             }
 
-            const category = detectCategory(
-              entry.text
-            );
+            const category =
+              detectCategory(entry.text);
 
             await ref.set({
-              municipality: source.municipality,
+              municipality:
+                source.municipality,
+
               category,
-              confidence: confidence(
-                category,
-                entry.text
-              ),
-              sourceId: source.id,
+
+              confidence:
+                confidenceFor(
+                  category,
+                  entry.text
+                ),
+
+              sourceId:
+                source.id,
+
               sourceName:
                 source.name ||
                 source.municipality,
-              sourceType: source.type,
+
+              sourceType:
+                source.type,
+
               sourceUrl:
                 entry.link ||
                 source.url,
-              excerpt: entry.text.slice(
-                0,
-                1000
-              ),
+
+              excerpt:
+                entry.text.slice(
+                  0,
+                  1000
+                ),
+
+              publishedText:
+                entry.published || "",
+
               contentHash,
+
               status: "pending",
-              scanner: "github-actions",
+
+              scanner:
+                "github-actions",
+
               createdAt:
                 FieldValue.serverTimestamp()
             });
@@ -422,37 +599,81 @@ jobs:
             return true;
           }
 
-          async function main() {
+          async function updateSystemStatus(
+            data
+          ) {
+            await db
+              .collection("system_status")
+              .doc("source_scanner")
+              .set(
+                data,
+                {
+                  merge: true
+                }
+              );
+          }
+
+          async function scanSources() {
+            const startedAt = new Date();
+
+            await updateSystemStatus({
+              running: true,
+
+              triggeredBy:
+                process.env.GITHUB_EVENT_NAME ||
+                "github-actions",
+
+              platform:
+                "github-actions",
+
+              startedAt:
+                FieldValue.serverTimestamp()
+            });
+
             const snapshot = await db
               .collection("source_registry")
-              .where("active", "==", true)
+              .where(
+                "active",
+                "==",
+                true
+              )
               .get();
 
             let checked = 0;
-            let created = 0;
-            let skippedFacebook = 0;
+            let recommendationsCreated = 0;
+            let facebookSkipped = 0;
             let failed = 0;
+            let baselined = 0;
 
-            for (const doc of snapshot.docs) {
+            const errors = [];
+
+            for (
+              const sourceDoc of snapshot.docs
+            ) {
               const source = {
-                id: doc.id,
-                ...doc.data()
+                id: sourceDoc.id,
+                ...sourceDoc.data()
               };
 
               try {
                 const result =
-                  await fetchEntries(source);
+                  await fetchSource(source);
 
                 if (result.skipped) {
-                  skippedFacebook += 1;
+                  facebookSkipped += 1;
 
-                  await doc.ref.set(
+                  await sourceDoc.ref.set(
                     {
                       lastCheckAt:
                         FieldValue.serverTimestamp(),
+
                       lastCheckStatus:
-                        "meta_api_required"
+                        result.reason,
+
+                      scanner:
+                        "github-actions"
                     },
+
                     {
                       merge: true
                     }
@@ -463,16 +684,24 @@ jobs:
 
                 checked += 1;
 
-                const hashes =
-                  result.entries.map((entry) =>
-                    hash(
-                      `${source.id}|${normalize(
+                const matching =
+                  result.entries.filter(
+                    (entry) =>
+                      containsSuspensionLanguage(
                         entry.text
-                      )}|${entry.link}`
+                      )
+                  );
+
+                const currentHashes =
+                  matching.map((entry) =>
+                    sha256(
+                      `${source.id}|${normalizeText(
+                        entry.text
+                      )}|${entry.link || ""}`
                     )
                   );
 
-                const known =
+                const knownHashes =
                   Array.isArray(
                     source.knownHashes
                   )
@@ -480,72 +709,87 @@ jobs:
                     : [];
 
                 const knownSet =
-                  new Set(known);
+                  new Set(knownHashes);
 
-                const firstRun =
+                const firstBaseline =
                   source.baselineComplete !==
                   true;
 
-                let sourceCreated = 0;
+                let newForSource = 0;
 
                 for (
                   let index = 0;
-                  index <
-                  result.entries.length;
+                  index < matching.length;
                   index += 1
                 ) {
+                  const entry =
+                    matching[index];
+
                   const contentHash =
-                    hashes[index];
+                    currentHashes[index];
 
-                  if (
-                    knownSet.has(
-                      contentHash
-                    )
-                  ) {
-                    continue;
-                  }
-
-                  if (
-                    firstRun &&
-                    !includeCurrent
-                  ) {
-                    continue;
-                  }
-
-                  const wasCreated =
-                    await createRecommendation(
-                      source,
-                      result.entries[index],
+                  const isUnseen =
+                    !knownSet.has(
                       contentHash
                     );
 
-                  if (wasCreated) {
-                    created += 1;
-                    sourceCreated += 1;
+                  const shouldCreate =
+                    isUnseen &&
+                    (
+                      !firstBaseline ||
+                      INCLUDE_CURRENT
+                    );
+
+                  if (
+                    shouldCreate &&
+                    (
+                      await createRecommendation(
+                        source,
+                        entry,
+                        contentHash
+                      )
+                    )
+                  ) {
+                    recommendationsCreated += 1;
+                    newForSource += 1;
                   }
                 }
 
-                await doc.ref.set(
+                if (firstBaseline) {
+                  baselined += 1;
+                }
+
+                const mergedHashes = [
+                  ...new Set([
+                    ...currentHashes,
+                    ...knownHashes
+                  ])
+                ].slice(
+                  0,
+                  MAX_KNOWN_HASHES
+                );
+
+                await sourceDoc.ref.set(
                   {
                     baselineComplete: true,
 
-                    knownHashes: [
-                      ...new Set([
-                        ...hashes,
-                        ...known
-                      ])
-                    ].slice(0, 120),
+                    knownHashes:
+                      mergedHashes,
 
                     lastCheckAt:
                       FieldValue.serverTimestamp(),
 
-                    lastCheckStatus: "ok",
+                    lastCheckStatus:
+                      "ok",
 
-                    lastMatchCount:
+                    lastEntryCount:
                       result.entries.length,
 
+                    lastMatchCount:
+                      matching.length,
+
                     lastNewCount:
-                      sourceCreated,
+                      newForSource,
 
                     lastError:
                       FieldValue.delete(),
@@ -553,6 +797,7 @@ jobs:
                     scanner:
                       "github-actions"
                   },
+
                   {
                     merge: true
                   }
@@ -560,7 +805,28 @@ jobs:
               } catch (error) {
                 failed += 1;
 
-                await doc.ref.set(
+                const message =
+                  error &&
+                  error.message
+                    ? error.message
+                    : String(error);
+
+                console.error(
+                  `Source check failed: ${source.id}: ${message}`
+                );
+
+                errors.push({
+                  sourceId:
+                    source.id,
+
+                  message:
+                    message.slice(
+                      0,
+                      300
+                    )
+                });
+
+                await sourceDoc.ref.set(
                   {
                     lastCheckAt:
                       FieldValue.serverTimestamp(),
@@ -568,14 +834,16 @@ jobs:
                     lastCheckStatus:
                       "error",
 
-                    lastError: String(
-                      error.message ||
-                      error
-                    ).slice(0, 500),
+                    lastError:
+                      message.slice(
+                        0,
+                        500
+                      ),
 
                     scanner:
                       "github-actions"
                   },
+
                   {
                     merge: true
                   }
@@ -583,56 +851,109 @@ jobs:
               }
             }
 
+            const summary = {
+              running: false,
+
+              platform:
+                "github-actions",
+
+              triggeredBy:
+                process.env.GITHUB_EVENT_NAME ||
+                "github-actions",
+
+              checked,
+
+              recommendationsCreated,
+
+              facebookSkipped,
+
+              failed,
+
+              baselined,
+
+              durationMs:
+                Date.now() -
+                startedAt.getTime(),
+
+              completedAt:
+                FieldValue.serverTimestamp()
+            };
+
+            await updateSystemStatus(
+              summary
+            );
+
             await db
               .collection(
                 "source_check_logs"
               )
               .add({
-                checked,
-
-                recommendationsCreated:
-                  created,
-
-                facebookSkipped:
-                  skippedFacebook,
-
-                failed,
-
-                includeCurrent,
-
-                scanner:
-                  "github-actions",
-
-                createdAt:
-                  FieldValue.serverTimestamp()
+                ...summary,
+                errors
               });
 
             console.log(
               JSON.stringify(
                 {
                   success: true,
+
                   checked,
 
-                  recommendationsCreated:
-                    created,
+                  recommendationsCreated,
 
-                  facebookSkipped:
-                    skippedFacebook,
+                  facebookSkipped,
 
                   failed,
 
-                  includeCurrent
+                  baselined,
+
+                  includeCurrent:
+                    INCLUDE_CURRENT
                 },
+
                 null,
                 2
               )
             );
+
+            if (
+              failed > 0 &&
+              checked === 0
+            ) {
+              process.exitCode = 1;
+            }
           }
 
-          main().catch((error) => {
-            console.error(error);
-            process.exitCode = 1;
-          });
+          scanSources().catch(
+            async (error) => {
+              console.error(error);
+
+              try {
+                await updateSystemStatus({
+                  running: false,
+
+                  platform:
+                    "github-actions",
+
+                  lastFatalError:
+                    String(
+                      error &&
+                      error.message
+                        ? error.message
+                        : error
+                    ).slice(
+                      0,
+                      800
+                    ),
+
+                  completedAt:
+                    FieldValue.serverTimestamp()
+                });
+              } catch {}
+
+              process.exitCode = 1;
+            }
+          );
           NODE
 
-          node scanner.cjs
+          GITHUB_EVENT_NAME="${{ github.event_name }}" node scanner.cjs
