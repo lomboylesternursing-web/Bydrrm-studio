@@ -404,7 +404,7 @@
       <section class="hero-card">
         <div class="hero-row">
           <div>
-            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V5</span></div>
+            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V5.1</span></div>
             <div class="hero-title">WALANG <span>PASOK MAP</span></div>
             <div class="hero-desc">Select a suspension category, then tap municipalities directly on the map. The final PNG is generated on a separate high-resolution canvas, so the map keeps its proper proportions.</div>
           </div>
@@ -630,7 +630,11 @@
               <input id="registrySelector" type="text" placeholder="CSS selector for the announcement area, e.g. main or .news-list" />
             </div>
           </div>
-          <button id="saveRegistrySource" class="primary-btn" style="width:100%;margin-top:9px">Save Official Source</button>
+          <div class="action-grid" style="margin-top:9px">
+            <button id="saveRegistrySource" class="primary-btn">Save Official Source</button>
+            <button id="installDefaultSources" class="secondary-btn">Install Verified Default Sources</button>
+          </div>
+          <div class="notice" style="margin-top:9px"><b>Default registry:</b> verified official LGU websites are installed automatically for the administrator. Facebook-only sources are saved but paused until a supported Meta integration is connected.</div>
           <div id="sourceRegistryList" class="admin-list"></div>
         </section>
 
@@ -682,6 +686,35 @@
   const googleProvider = new GoogleAuthProvider();
   googleProvider.setCustomParameters({ prompt: "select_account" });
   const BOOTSTRAP_ADMIN_EMAIL = "lomboylester.nursing@gmail.com";
+
+  const DEFAULT_SOURCE_REGISTRY_VERSION = "2026-07-13-v1";
+  const DEFAULT_OFFICIAL_SOURCES = [
+    { id: "angat-official-website", municipality: "Angat", type: "website", name: "Municipal Government of Angat — Official Website", url: "https://www.angatgov.ph/", selector: "", active: true },
+    { id: "balagtas-official-website", municipality: "Balagtas", type: "website", name: "Municipality of Balagtas — Official Website", url: "https://www.balagtas.gov.ph/", selector: "", active: true },
+    { id: "baliwag-official-website", municipality: "Baliwag", type: "website", name: "City Government of Baliwag — Official Website", url: "https://www.baliwag.gov.ph/", selector: "", active: true },
+    { id: "bocaue-official-facebook", municipality: "Bocaue", type: "facebook", name: "Municipality of Bocaue — Official Facebook Page", url: "https://www.facebook.com/p/Municipality-of-Bocaue-61575993974475/", selector: "", active: false },
+    { id: "bulakan-elgu-website", municipality: "Bulakan", type: "website", name: "Municipality of Bulakan — eLGU Website", url: "https://elgu-bulacan-bulacan-news.e.gov.ph/", selector: "", active: true },
+    { id: "bustos-elgu-website", municipality: "Bustos", type: "website", name: "Municipality of Bustos — eLGU Website", url: "https://elgu-bustos-bulacan.e.gov.ph/", selector: "", active: true },
+    { id: "calumpit-official-website", municipality: "Calumpit", type: "website", name: "Municipality of Calumpit — Official Website", url: "https://www.calumpit.gov.ph/", selector: "", active: true },
+    { id: "drt-official-website", municipality: "Doña Remedios Trinidad", type: "website", name: "Municipality of Doña Remedios Trinidad — Official Website", url: "https://drtbulacan.gov.ph/", selector: "", active: true },
+    { id: "guiguinto-official-website", municipality: "Guiguinto", type: "website", name: "Municipality of Guiguinto — Official Website", url: "https://www.guiguinto.gov.ph/", selector: "", active: true },
+    { id: "hagonoy-official-website", municipality: "Hagonoy", type: "website", name: "Municipality of Hagonoy — Official Website", url: "https://www.hagonoybulacan.gov.ph/", selector: "", active: true },
+    { id: "malolos-official-website", municipality: "Malolos", type: "website", name: "City Government of Malolos — Official Website", url: "https://www.maloloscity.gov.ph/", selector: "", active: true },
+    { id: "marilao-official-website", municipality: "Marilao", type: "website", name: "Municipal Government of Marilao — Official Website", url: "https://marilao.gov.ph/", selector: "", active: true },
+    { id: "meycauayan-official-website", municipality: "Meycauayan", type: "website", name: "City Government of Meycauayan — Official Website", url: "https://www.meycauayancity.gov.ph/", selector: "", active: true },
+    { id: "norzagaray-official-website", municipality: "Norzagaray", type: "website", name: "Municipality of Norzagaray — Official Website", url: "https://norzagaray.gov.ph/", selector: "", active: true },
+    { id: "obando-official-website", municipality: "Obando", type: "website", name: "Municipality of Obando — Official Website", url: "https://obando.gov.ph/", selector: "", active: true },
+    { id: "pandi-official-website", municipality: "Pandi", type: "website", name: "Municipality of Pandi — Official Website", url: "https://pandi.bulacan.gov.ph/", selector: "", active: true },
+    { id: "paombong-official-website", municipality: "Paombong", type: "website", name: "Municipality of Paombong — Official Website", url: "https://paombong.gov.ph/", selector: "", active: true },
+    { id: "plaridel-official-website", municipality: "Plaridel", type: "website", name: "Municipality of Plaridel — Official Website", url: "https://plaridelbulacanlgu.ph/", selector: "", active: true },
+    { id: "pulilan-official-website", municipality: "Pulilan", type: "website", name: "Municipality of Pulilan — Official Website", url: "https://pulilan.gov.ph/", selector: "", active: true },
+    { id: "san-ildefonso-government-site", municipality: "San Ildefonso", type: "website", name: "Municipal Government of San Ildefonso — Government Portal", url: "https://sanildefonso.balinkbayan.gov.ph/", selector: "", active: true },
+    { id: "sjdm-official-website", municipality: "San Jose del Monte", type: "website", name: "City of San Jose del Monte — Official Website", url: "https://csjdm.gov.ph/", selector: "", active: true },
+    { id: "san-miguel-official-website", municipality: "San Miguel", type: "website", name: "Municipality of San Miguel — Official Website", url: "https://www.sanmiguelbulacan.gov.ph/", selector: "", active: true },
+    { id: "san-rafael-official-website", municipality: "San Rafael", type: "website", name: "Municipality of San Rafael — Official Website", url: "https://sanrafael.gov.ph/", selector: "", active: true },
+    { id: "santa-maria-official-website", municipality: "Santa Maria", type: "website", name: "Municipality of Santa Maria — Official Website", url: "https://santamariabulacan.ph/", selector: "", active: true }
+  ];
+
 
   (() => {
     "use strict";
@@ -776,7 +809,7 @@
       adminSourceSection: $("adminSourceSection"), adminUsersSection: $("adminUsersSection"),
       registryMunicipality: $("registryMunicipality"), registryType: $("registryType"),
       registryName: $("registryName"), registryUrl: $("registryUrl"),
-      registrySelector: $("registrySelector"), saveRegistrySource: $("saveRegistrySource"),
+      registrySelector: $("registrySelector"), saveRegistrySource: $("saveRegistrySource"), installDefaultSources: $("installDefaultSources"),
       sourceRegistryList: $("sourceRegistryList"), pendingUsersList: $("pendingUsersList")
     };
 
@@ -1810,10 +1843,10 @@
       URL.revokeObjectURL(svgUrl);
       const link = document.createElement("a");
       const safeDate = els.date.value || "undated";
-      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v5.png`;
+      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v5.1.png`;
       link.href = canvas.toDataURL("image/png", 1);
       link.click();
-      showToast("Professional export V5 downloaded.");
+      showToast("Professional export V5.1 downloaded.");
     }
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -1858,6 +1891,7 @@
       els.adminSourceSection.classList.toggle("visible", isAdmin);
       els.adminUsersSection.classList.toggle("visible", isAdmin);
       bindFirebaseRealtime(profile);
+      if (isAdmin) installVerifiedDefaultSources({ silent: true });
     }
 
     async function ensureUserProfile(user) {
@@ -2092,6 +2126,70 @@
       }
     }
 
+
+    async function installVerifiedDefaultSources({ silent = false } = {}) {
+      if (!currentFirebaseProfile || currentFirebaseProfile.role !== "admin") return;
+
+      if (els.installDefaultSources) {
+        els.installDefaultSources.disabled = true;
+        els.installDefaultSources.textContent = "Installing…";
+      }
+
+      let added = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      try {
+        for (const source of DEFAULT_OFFICIAL_SOURCES) {
+          const sourceRef = doc(db, "source_registry", source.id);
+          const snapshot = await getDoc(sourceRef);
+
+          if (!snapshot.exists()) {
+            await setDoc(sourceRef, {
+              ...source,
+              managedDefault: true,
+              registryVersion: DEFAULT_SOURCE_REGISTRY_VERSION,
+              createdBy: currentFirebaseUser.uid,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+            added += 1;
+            continue;
+          }
+
+          const existing = snapshot.data();
+          if (existing.managedDefault === true) {
+            await setDoc(sourceRef, {
+              municipality: source.municipality,
+              type: source.type,
+              name: source.name,
+              url: source.url,
+              selector: source.selector,
+              active: typeof existing.active === "boolean" ? existing.active : source.active,
+              managedDefault: true,
+              registryVersion: DEFAULT_SOURCE_REGISTRY_VERSION,
+              updatedAt: serverTimestamp()
+            }, { merge: true });
+            updated += 1;
+          } else {
+            skipped += 1;
+          }
+        }
+
+        if (!silent) {
+          showToast(`Default registry ready: ${added} added, ${updated} refreshed, ${skipped} custom source${skipped === 1 ? "" : "s"} preserved.`);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!silent) showToast("Unable to install the default source registry.");
+      } finally {
+        if (els.installDefaultSources) {
+          els.installDefaultSources.disabled = false;
+          els.installDefaultSources.textContent = "Install Verified Default Sources";
+        }
+      }
+    }
+
     async function saveRegistrySource() {
       if (!currentFirebaseProfile || currentFirebaseProfile.role !== "admin") return;
       const municipality = els.registryMunicipality.value;
@@ -2152,6 +2250,7 @@
       els.authSignOut.addEventListener("click", handleSignOut);
       els.signOutButton.addEventListener("click", handleSignOut);
       els.saveRegistrySource.addEventListener("click", saveRegistrySource);
+      els.installDefaultSources.addEventListener("click", () => installVerifiedDefaultSources({ silent: false }));
       els.checkSourcesNow.addEventListener("click", checkSourcesNow);
 
       onAuthStateChanged(auth, async user => {
