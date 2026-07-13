@@ -261,20 +261,83 @@
       25%, 70% { box-shadow: 0 0 0 4px rgba(76,145,255,.35), 0 18px 45px rgba(0,0,0,.28); border-color: rgba(91,160,255,.85); }
     }
     .bottom-nav {
-      position: fixed; left: 50%; bottom: 0; transform: translateX(-50%); z-index: 60;
-      width: 100%; max-width: 780px; display: grid; grid-template-columns: repeat(4, 1fr);
-      padding: 8px 10px var(--safe-bottom);
-      background: rgba(5,11,24,.94); backdrop-filter: blur(18px);
-      border-top: 1px solid var(--line);
+      position: fixed;
+      left: 50%;
+      bottom: calc(10px + var(--safe-bottom));
+      transform: translateX(-50%);
+      z-index: 60;
+      width: calc(100% - 22px);
+      max-width: 540px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+      padding: 7px;
+      border-radius: 24px;
+      background: rgba(7,16,34,.88);
+      backdrop-filter: blur(24px) saturate(145%);
+      -webkit-backdrop-filter: blur(24px) saturate(145%);
+      border: 1px solid rgba(148,190,255,.18);
+      box-shadow:
+        0 18px 45px rgba(0,0,0,.42),
+        inset 0 1px 0 rgba(255,255,255,.055);
     }
     .nav-btn {
-      border: 0; background: transparent; color: var(--muted); min-height: 54px;
-      display: grid; place-items: center; gap: 2px; font-size: 10px; font-weight: 760; cursor: pointer;
+      position: relative;
+      border: 0;
+      border-radius: 18px;
+      background: transparent;
+      color: #8191ad;
+      min-height: 58px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      padding: 6px 4px;
+      font-size: 9.5px;
+      font-weight: 760;
+      letter-spacing: .015em;
+      cursor: pointer;
+      transition: color .2s ease, background .2s ease, transform .18s ease;
+      -webkit-tap-highlight-color: transparent;
     }
-    .nav-btn .nav-icon { font-size: 20px; line-height: 1; }
-    .nav-btn.active { color: #7eb4ff; }
+    .nav-btn:active { transform: scale(.96); }
+    .nav-btn .nav-icon {
+      width: 23px;
+      height: 23px;
+      display: grid;
+      place-items: center;
+      line-height: 1;
+    }
+    .nav-btn .nav-icon svg {
+      width: 23px;
+      height: 23px;
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .nav-btn.active {
+      color: #ffffff;
+      background:
+        linear-gradient(145deg, rgba(39,116,255,.95), rgba(30,73,176,.84));
+      box-shadow:
+        0 8px 20px rgba(34,103,240,.28),
+        inset 0 1px 0 rgba(255,255,255,.16);
+    }
+    .nav-btn.active::after {
+      content: "";
+      position: absolute;
+      bottom: 4px;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #b8d8ff;
+      box-shadow: 0 0 10px rgba(142,195,255,.95);
+    }
     .toast {
-      position: fixed; left: 50%; bottom: calc(82px + var(--safe-bottom)); transform: translate(-50%, 20px);
+      position: fixed; left: 50%; bottom: calc(96px + var(--safe-bottom)); transform: translate(-50%, 20px);
       width: min(92%, 520px); padding: 12px 14px; border-radius: 13px;
       background: #132746; border: 1px solid rgba(127,177,255,.32); box-shadow: var(--shadow);
       color: white; font-size: 12px; opacity: 0; pointer-events: none; transition: .22s; z-index: 100;
@@ -404,7 +467,7 @@
       <section class="hero-card">
         <div class="hero-row">
           <div>
-            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V5.2</span></div>
+            <div class="eyebrow">BULACAN • PUBLIC INFORMATION <span style="margin-left:7px;padding:3px 7px;border-radius:999px;background:rgba(45,120,255,.13);border:1px solid rgba(85,160,255,.28);font-size:9px">FIREBASE V6</span></div>
             <div class="hero-title">WALANG <span>PASOK MAP</span></div>
             <div class="hero-desc">Select a suspension category, then tap municipalities directly on the map. The final PNG is generated on a separate high-resolution canvas, so the map keeps its proper proportions.</div>
           </div>
@@ -582,7 +645,7 @@
             <button id="analyzeRecommendation" class="primary-btn">Analyze & Add Suggestion</button>
             <button id="addRecommendation" class="secondary-btn">Add Link Manually</button>
           </div>
-          <div class="notice" style="margin-top:10px"><b>Smart Recommendation V1:</b> the app analyzes pasted announcement text and prepares suggestions for human verification. Live background monitoring will be connected through the secure backend later. Nothing is automatically published.</div>
+          <div class="notice" style="margin-top:10px"><b>Manual fallback:</b> paste announcement text when an official Facebook post is not yet available through the automated scanner. Every suggestion still requires human verification before it changes the map.</div>
         </section>
         <div id="recommendationList" style="display:grid;gap:10px"></div>
 
@@ -595,8 +658,15 @@
             <span id="cloudRecommendationBadge" class="confidence">Connecting…</span>
           </div>
           <div class="cloud-status">
-            <div><strong id="scannerStatus">Scanner not deployed yet</strong><br><span id="scannerStatusSub">The review inbox will connect after Authentication and Firestore are enabled.</span></div>
-            <button id="checkSourcesNow" class="secondary-btn" style="min-height:36px;padding:7px 11px;font-size:10px">Check Sources Now</button>
+            <div>
+              <strong id="scannerStatus">Checking scanner connection…</strong><br>
+              <span id="scannerStatusSub">Website and RSS monitoring runs every 15 minutes after Cloud Functions deployment.</span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px">
+                <span class="confidence">Web/RSS automatic</span>
+                <span class="confidence" style="background:rgba(255,176,32,.08);border-color:rgba(255,176,32,.22);color:#ffd88a">Facebook: Meta integration pending</span>
+              </div>
+            </div>
+            <button id="checkSourcesNow" class="secondary-btn" style="min-height:36px;padding:7px 11px;font-size:10px">Scan Sources Now</button>
           </div>
           <div id="cloudRecommendationList" class="cloud-recommendation-list"></div>
         </section>
@@ -649,10 +719,45 @@
   </div>
 
   <nav id="bottomNav" class="bottom-nav firebase-hidden" aria-label="Primary navigation">
-    <button class="nav-btn active" data-nav="map"><span class="nav-icon">🗺️</span><span>Map</span></button>
-    <button id="navCaption" class="nav-btn"><span class="nav-icon">📝</span><span>Caption</span></button>
-    <button class="nav-btn" data-nav="recommendations"><span class="nav-icon">🔎</span><span>Sources</span></button>
-    <button id="navSave" class="nav-btn"><span class="nav-icon">💾</span><span>Save</span></button>
+    <button class="nav-btn active" data-nav="map" aria-label="Map Studio">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M9 18 3.8 20.6A1.2 1.2 0 0 1 2 19.5V6.3a1.2 1.2 0 0 1 .7-1.1L9 2l6 3 5.2-2.6A1.2 1.2 0 0 1 22 3.5v13.2a1.2 1.2 0 0 1-.7 1.1L15 21l-6-3Z"/>
+          <path d="M9 2v16M15 5v16"/>
+        </svg>
+      </span>
+      <span>Map</span>
+    </button>
+
+    <button id="navCaption" class="nav-btn" aria-label="Caption Generator">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-8l-5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/>
+          <path d="M7 8h10M7 12h7"/>
+        </svg>
+      </span>
+      <span>Caption</span>
+    </button>
+
+    <button class="nav-btn" data-nav="recommendations" aria-label="Official Sources">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="6.5"/>
+          <path d="m16 16 4.5 4.5M8.5 11h5M11 8.5v5"/>
+        </svg>
+      </span>
+      <span>Sources</span>
+    </button>
+
+    <button id="navSave" class="nav-btn" aria-label="Save Project">
+      <span class="nav-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M5 3h11l3 3v15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/>
+          <path d="M8 3v6h8V4M8 21v-7h8v7"/>
+        </svg>
+      </span>
+      <span>Save</span>
+    </button>
   </nav>
 
   <div id="toast" class="toast"></div>
@@ -1882,10 +1987,10 @@
       URL.revokeObjectURL(svgUrl);
       const link = document.createElement("a");
       const safeDate = els.date.value || "undated";
-      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v5.2.png`;
+      link.download = `BYDRRM-Walang-Pasok-${safeDate}-${mode}-v6.png`;
       link.href = canvas.toDataURL("image/png", 1);
       link.click();
-      showToast("Professional export V5.2 downloaded.");
+      showToast("Professional export V6 downloaded.");
     }
 
     function roundRect(ctx, x, y, w, h, r) {
@@ -2096,7 +2201,7 @@
           <div class="admin-item-head">
             <div>
               <div class="admin-item-title">${escapeHtml(item.municipality)} • ${escapeHtml(item.name || item.type)}</div>
-              <div class="admin-item-sub">${escapeHtml(item.url)}<br>Type: ${escapeHtml(item.type)} • ${item.active === false ? "Paused" : "Active"}</div>
+              <div class="admin-item-sub">${escapeHtml(item.url)}<br>Type: ${escapeHtml(item.type)} • ${item.active === false ? "Paused" : "Active"}${item.lastCheckStatus ? ` • Last check: ${escapeHtml(item.lastCheckStatus)}` : ""}${item.lastCheckAt ? `<br>${toJsDate(item.lastCheckAt).toLocaleString()}` : ""}</div>
             </div>
             <span class="confidence">${
               item.verification === "needs_confirmation"
@@ -2168,7 +2273,30 @@
         els.scannerStatusSub.textContent = error.message;
       }));
 
-      if (profile.role === "admin") {
+      firebaseUnsubscribers.push(onSnapshot(doc(db, "system_status", "source_scanner"), snapshot => {
+        if (!snapshot.exists()) {
+          els.scannerStatus.textContent = "Scanner package not deployed";
+          els.scannerStatusSub.textContent = "Deploy the included Cloud Functions package to begin scheduled website and RSS monitoring.";
+          return;
+        }
+        const status = snapshot.data();
+        const checked = status.checked ?? 0;
+        const created = status.recommendationsCreated ?? 0;
+        const skipped = status.facebookSkipped ?? 0;
+        const failed = status.failed ?? 0;
+        els.scannerStatus.textContent = status.running ? "Source scan in progress…" : "Automatic scanner active";
+        const when = status.completedAt ? toJsDate(status.completedAt).toLocaleString() : "No completed scan yet";
+        els.scannerStatusSub.textContent = `${when} • ${checked} web/RSS checked • ${created} new • ${failed} failed • ${skipped} Facebook queued for Meta`;
+      }, error => {
+        console.error(error);
+        els.scannerStatus.textContent = "Scanner status unavailable";
+        els.scannerStatusSub.textContent = error.message;
+      }));
+
+      const isAdmin = profile.role === "admin";
+      els.checkSourcesNow.style.display = isAdmin ? "inline-flex" : "none";
+
+      if (isAdmin) {
         firebaseUnsubscribers.push(onSnapshot(collection(db, "source_registry"), snapshot =>
           renderSourceRegistry(snapshot.docs.map(d => ({ id: d.id, ...d.data() })))
         ));
@@ -2279,10 +2407,12 @@
       els.checkSourcesNow.textContent = "Checking…";
       try {
         const callable = httpsCallable(functions, "checkSourcesNow");
-        const result = await callable({});
+        const result = await callable({ includeCurrent: true });
         const checked = result.data?.checked ?? 0;
         const found = result.data?.recommendationsCreated ?? 0;
-        showToast(`Checked ${checked} source${checked === 1 ? "" : "s"}; ${found} new suggestion${found === 1 ? "" : "s"}.`);
+        const skipped = result.data?.facebookSkipped ?? 0;
+        const failed = result.data?.failed ?? 0;
+        showToast(`Scan complete: ${checked} web/RSS checked, ${found} new, ${failed} failed, ${skipped} Facebook pending Meta access.`);
       } catch (error) {
         console.error(error);
         showToast(error.message?.includes("not-found")
@@ -2290,7 +2420,7 @@
           : "Unable to check sources right now.");
       } finally {
         els.checkSourcesNow.disabled = false;
-        els.checkSourcesNow.textContent = "Check Sources Now";
+        els.checkSourcesNow.textContent = "Scan Sources Now";
       }
     }
 
