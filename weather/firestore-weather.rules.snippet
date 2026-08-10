@@ -1,0 +1,22 @@
+// MERGE this block into the EXISTING bydrrm-studio Firestore rules.
+// Do not replace the current Studio rules wholesale.
+
+function weatherApprovedUser() {
+  return request.auth != null
+    && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true
+    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active != false;
+}
+function weatherAdmin() {
+  return weatherApprovedUser()
+    && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+}
+match /weather_advisories/{id} {
+  allow read: if true;
+  allow write: if false; // backend Admin SDK only
+}
+match /weather_settings/{id} {
+  allow read: if weatherApprovedUser();
+  allow create, update: if weatherAdmin();
+  allow delete: if false;
+}

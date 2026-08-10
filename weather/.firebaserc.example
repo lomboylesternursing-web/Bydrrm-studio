@@ -1,0 +1,4 @@
+{
+  "projects": {"default": "bydrrm-studio"},
+  "targets": {"bydrrm-studio": {"hosting": {"weather": ["bydrrm-weather"]}}}
+}
