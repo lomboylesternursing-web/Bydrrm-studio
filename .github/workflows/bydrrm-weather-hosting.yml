@@ -1,0 +1,88 @@
+name: BYDRRM Weather Hosting
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "weather/public/**"
+      - "weather/firebase.json"
+      - "weather/.firebaserc.example"
+      - ".github/workflows/bydrrm-weather-hosting.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bydrrm-weather-hosting
+  cancel-in-progress: false
+
+jobs:
+  deploy-hosting:
+    name: Deploy isolated Weather site
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_PROJECT_ID: bydrrm-studio
+      WEATHER_SITE_ID: bydrrm-weather
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify Firebase credential is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT:-}" ]; then
+            echo "::error::Missing repository secret FIREBASE_SERVICE_ACCOUNT. No Firebase changes were made."
+            exit 1
+          fi
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Authenticate Firebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Ensure isolated Weather Hosting site
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase hosting:sites:list --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/sites.json"
+          if node -e 'const f=require(process.argv[1]); const id=process.argv[2]; process.exit((f.result||f.sites||[]).some(x=>(x.name||x.site||"").split("/").pop()===id)?0:1)' "$RUNNER_TEMP/sites.json" "$WEATHER_SITE_ID"; then
+            echo "Weather Hosting site already exists."
+          else
+            firebase hosting:sites:create "$WEATHER_SITE_ID" --project "$FIREBASE_PROJECT_ID" --non-interactive
+          fi
+
+      - name: Bind Weather hosting target
+        shell: bash
+        working-directory: weather
+        run: |
+          set -euo pipefail
+          firebase target:apply hosting weather "$WEATHER_SITE_ID" --project "$FIREBASE_PROJECT_ID"
+
+      - name: Deploy Weather public/admin site only
+        shell: bash
+        working-directory: weather
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting:weather --project "$FIREBASE_PROJECT_ID" --non-interactive
+
+      - name: Verify deployed site
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "https://${WEATHER_SITE_ID}.web.app/" >/dev/null
+          echo "Weather site: https://${WEATHER_SITE_ID}.web.app/"
