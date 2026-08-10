@@ -34,6 +34,12 @@ function esc(value = "") {
   })[c]);
 }
 
+function callableErrorMessage(error) {
+  if (typeof error?.details === "string" && error.details) return error.details;
+  if (error?.details?.message) return String(error.details.message);
+  return error?.message || "Unknown error";
+}
+
 function postedToday(row, today) {
   if (row.postStatus !== "posted") return false;
   if (row.postedDateManila) return row.postedDateManila === today;
@@ -73,12 +79,16 @@ async function load() {
 
   $("#activityRows").innerHTML = latestRows.map(a => {
     const verified = a.parserConfidence >= 0.95;
-    const canTestPost = profile?.role === "admin" && verified && a.postStatus === "held";
+    const canTestPost = profile?.role === "admin" && verified && ["held", "failed"].includes(a.postStatus);
+    const errorLine = a.postStatus === "failed" && a.postError
+      ? `<br><span style="display:inline-block;margin-top:6px;color:#ff9a9a;font-size:11px;max-width:260px">${esc(a.postError)}</span>`
+      : "";
     const facebookCell = `
       <span class="${a.postStatus === "posted" ? "ok" : a.postStatus === "failed" ? "fail" : ""}">
         ${esc((a.postStatus || "not posted").toUpperCase())}
       </span>
-      ${canTestPost ? `<br><button class="btn secondary test-post" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">Publish test</button>` : ""}
+      ${errorLine}
+      ${canTestPost ? `<br><button class="btn secondary test-post" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">${a.postStatus === "failed" ? "Retry test" : "Publish test"}</button>` : ""}
     `;
 
     return `<tr>
@@ -128,7 +138,7 @@ $("#scanNow").onclick = async () => {
     alert(`Scan complete: ${r.data.detected} detected, ${r.data.posted} posted, ${r.data.held} held, ${r.data.duplicates || 0} duplicate.`);
     await load();
   } catch (e) {
-    alert(e.message);
+    alert(callableErrorMessage(e));
   } finally {
     button.disabled = false;
     button.textContent = "Run scan";
@@ -140,7 +150,7 @@ $("#activityRows").addEventListener("click", async event => {
   if (!button || profile?.role !== "admin") return;
 
   const advisory = latestRows.find(a => a.id === button.dataset.id);
-  if (!advisory || advisory.parserConfidence < 0.95 || advisory.postStatus !== "held") {
+  if (!advisory || advisory.parserConfidence < 0.95 || !["held", "failed"].includes(advisory.postStatus)) {
     alert("This advisory is no longer eligible for a controlled test post.");
     await load();
     return;
@@ -158,11 +168,11 @@ $("#activityRows").addEventListener("click", async event => {
     alert("Controlled Facebook test post published successfully. Full Auto remains OFF.");
     await load();
   } catch (e) {
-    alert(`Facebook test post failed: ${e.message}`);
+    alert(`Facebook test post failed: ${callableErrorMessage(e)}`);
     await load();
   } finally {
     button.disabled = false;
-    button.textContent = "Publish test";
+    button.textContent = "Retry test";
   }
 });
 
