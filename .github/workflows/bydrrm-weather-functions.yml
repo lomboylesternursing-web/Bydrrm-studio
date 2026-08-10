@@ -1,0 +1,36 @@
+name: BYDRRM Weather Functions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-functions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT_ID: bydrrm-studio
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install function dependencies
+        working-directory: weather/functions
+        run: npm install
+      - name: Run parser tests
+        working-directory: weather/functions
+        run: npm test
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+      - name: Authenticate
+        shell: bash
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+      - name: Deploy Weather functions only
+        working-directory: weather
+        run: firebase deploy --only functions --project "$FIREBASE_PROJECT_ID" --non-interactive
