@@ -1,6 +1,13 @@
 name: BYDRRM Weather Functions
 
 on:
+  push:
+    branches:
+      - agent/bydrrm-weather-v1
+    paths:
+      - "weather/functions/**"
+      - "weather/firebase.json"
+      - ".github/workflows/bydrrm-weather-functions.yml"
   workflow_dispatch:
 
 permissions:
