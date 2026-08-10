@@ -79,6 +79,7 @@ async function load() {
 
   $("#activityRows").innerHTML = latestRows.map(a => {
     const verified = a.parserConfidence >= 0.95;
+    const canPreview = profile?.role === "admin" && verified;
     const canTestPost = profile?.role === "admin" && verified && ["held", "failed"].includes(a.postStatus);
     const errorLine = a.postStatus === "failed" && a.postError
       ? `<br><span style="display:inline-block;margin-top:6px;color:#ff9a9a;font-size:11px;max-width:260px">${esc(a.postError)}</span>`
@@ -88,7 +89,8 @@ async function load() {
         ${esc((a.postStatus || "not posted").toUpperCase())}
       </span>
       ${errorLine}
-      ${canTestPost ? `<br><button class="btn secondary test-post" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">${a.postStatus === "failed" ? "Retry test" : "Publish test"}</button>` : ""}
+      ${canPreview ? `<br><button class="btn secondary preview-graphic" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">Preview graphic</button>` : ""}
+      ${canTestPost ? `<br><button class="btn secondary test-post" data-id="${esc(a.id)}" style="margin-top:6px;padding:7px 10px;font-size:12px">${a.postStatus === "failed" ? "Retry test" : "Publish test"}</button>` : ""}
     `;
 
     return `<tr>
@@ -146,6 +148,38 @@ $("#scanNow").onclick = async () => {
 };
 
 $("#activityRows").addEventListener("click", async event => {
+  const previewButton = event.target.closest(".preview-graphic");
+  if (previewButton && profile?.role === "admin") {
+    const advisory = latestRows.find(a => a.id === previewButton.dataset.id);
+    if (!advisory || advisory.parserConfidence < 0.95) {
+      alert("Only verified advisories can be previewed.");
+      return;
+    }
+
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      alert("Please allow pop-ups for this site so the graphic preview can open.");
+      return;
+    }
+    previewWindow.document.write('<div style="font-family:system-ui;padding:24px;background:#07121e;color:white;min-height:100vh">Generating preview…</div>');
+    previewButton.disabled = true;
+    previewButton.textContent = "Generating…";
+    try {
+      const r = await httpsCallable(functions, "previewWeatherGraphic")({ id: advisory.id });
+      const src = `data:${r.data.mimeType || "image/png"};base64,${r.data.imageBase64}`;
+      previewWindow.document.open();
+      previewWindow.document.write(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(advisory.title || "Weather Graphic Preview")}</title></head><body style="margin:0;background:#07121e;display:flex;align-items:flex-start;justify-content:center;min-height:100vh"><img src="${src}" alt="Weather graphic preview" style="display:block;width:100%;max-width:1080px;height:auto"></body></html>`);
+      previewWindow.document.close();
+    } catch (e) {
+      previewWindow.close();
+      alert(`Graphic preview failed: ${callableErrorMessage(e)}`);
+    } finally {
+      previewButton.disabled = false;
+      previewButton.textContent = "Preview graphic";
+    }
+    return;
+  }
+
   const button = event.target.closest(".test-post");
   if (!button || profile?.role !== "admin") return;
 
