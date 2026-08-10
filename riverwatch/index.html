@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BYDRRM RiverWatch — Bulacan</title>
+<link rel="preconnect" href="https://unpkg.com"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div>
+      <h1>🌊 BYDRRM RiverWatch</h1>
+      <p>Bulacan River & Bridge Water-Level Monitoring — MVP</p>
+    </div>
+    <div class="badge">Hybrid official-feed connector • Human-approved posting</div>
+  </div>
+</header>
+<div id="demoBanner" class="demo-banner">DEMO MODE — all readings shown are simulated and are NOT official observations.</div>
+
+<main>
+  <section class="stats">
+    <div class="stat"><div class="v" id="statStations">19</div><div class="k">DOCUMENTED STATIONS</div></div>
+    <div class="stat"><div class="v" id="statReporting">0</div><div class="k">WITH CURRENT READING</div></div>
+    <div class="stat"><div class="v" id="statRising">0</div><div class="k">RISING</div></div>
+    <div class="stat"><div class="v" id="statCritical">0</div><div class="k">ALARM / CRITICAL</div></div>
+    <div class="stat"><div class="v" id="statNoData">19</div><div class="k">NO DATA</div></div>
+  </section>
+
+  <div class="toolbar">
+    <input class="search" id="search" placeholder="Search bridge, municipality, barangay…"/>
+    <button class="btn primary" id="updateBtn">+ Add water-level update</button>
+    <button class="btn" id="syncBtn">↻ Sync Official Feeds</button>
+    <button class="btn" id="demoBtn">Load demo readings</button>
+    <button class="btn" id="exportBtn">Export readings JSON</button>
+    <label class="btn" for="importFile">Import readings JSON</label>
+    <input id="importFile" type="file" accept=".json,application/json" hidden/>
+    <button class="btn danger" id="clearBtn">Clear readings</button>
+  </div>
+
+  <section class="feed-grid" id="feedGrid">
+    <div class="feed-card"><div class="feed-head"><span class="feed-name">Bulacan PDRRMO</span><span class="feed-state" id="pdrrmoState">NOT SYNCED</span></div><div class="feed-meta" id="pdrrmoMeta">Public river-status/dam connector ready. Run through the RiverWatch server.</div></div>
+    <div class="feed-card"><div class="feed-head"><span class="feed-name">DOST-ASTI PhilSensors</span><span class="feed-state" id="astiState">API PENDING</span></div><div class="feed-meta" id="astiMeta">Official API adapter ready; approved endpoint/token still required.</div></div>
+  </section>
+
+  <section class="layout">
+    <div id="map"></div>
+    <aside class="side">
+      <h2>Monitoring points</h2>
+      <div id="stationList"></div>
+    </aside>
+  </section>
+
+
+  <h2 class="section-title">📣 RiverWatch Posting Studio</h2>
+  <section class="studio-shell">
+    <div class="studio-controls">
+      <h3>Create a branded BYDRRM water-level advisory</h3>
+      <div class="studio-form">
+        <div><label>Template</label><select id="studioTemplate"><option value="single">Single Station Advisory</option><option value="multi">Multi-Station Monitoring Board</option></select></div>
+        <div><label>Format</label><select id="studioFormat"><option value="post">Facebook Post 4:5</option><option value="story">Story 9:16</option></select></div>
+        <div class="full"><label>Primary monitoring point</label><select id="studioStation"></select></div>
+        <div class="full studio-hidden" id="multiStationWrap"><label>Stations for monitoring board (up to 6)</label><select id="studioMultiStations" class="multi-select" multiple></select><div class="studio-tip">Tip: use “Select same municipality” then Ctrl/⌘-click to adjust selections on desktop. On mobile, use the multi-select list.</div></div>
+        <div class="full studio-hidden" id="multiStationActions"><button class="btn" type="button" id="selectMunicipality">Select same municipality</button></div>
+        <div class="single-only"><label>Status</label><select id="studioStatus"><option>NORMAL</option><option>WATCH</option><option>ALARM</option><option>CRITICAL</option><option>NO DATA</option></select></div>
+        <div class="single-only"><label>Water level (m)</label><input id="studioLevel" type="number" min="0" step="0.01" placeholder="Latest verified reading"/></div>
+        <div class="single-only"><label>Rate of rise (cm/hr)</label><input id="studioRise" type="number" step="0.1" placeholder="Auto if available"/></div>
+        <div class="single-only"><label>Observation time</label><input id="studioTime" type="datetime-local"/></div>
+        <div><label>Source</label><select id="studioSource"><option>DOST-ASTI PhilSensors</option><option>Bulacan PDRRMO</option><option>PAGASA / PRFFWC</option><option>LGU / MDRRMO</option><option>BYDRRM verified field report</option><option>Manual / unverified</option></select></div>
+        <div class="full"><label>Advisory headline</label><input id="studioHeadline" placeholder="e.g. Water level continues to rise"/></div>
+        <div class="full"><label>Public note</label><textarea id="studioNote" placeholder="Optional context, affected area, monitoring note…"></textarea></div>
+        <div><label>BYDRRM logo</label><input id="studioLogo" type="file" accept="image/png,image/jpeg,image/webp"/></div>
+        <div><label>Source / partner logo</label><input id="studioSourceLogo" type="file" accept="image/png,image/jpeg,image/webp"/></div>
+      </div>
+
+      <div class="threshold-box" id="thresholdBox">
+        <h4>Verified threshold profile — selected station</h4>
+        <div id="thresholdState" class="threshold-state warn">Official thresholds not encoded.</div>
+        <div class="threshold-row">
+          <div><label>Alert / Watch (m)</label><input id="thresholdAlert" type="number" min="0" step="0.01" placeholder="—"/></div>
+          <div><label>Alarm (m)</label><input id="thresholdAlarm" type="number" min="0" step="0.01" placeholder="—"/></div>
+          <div><label>Critical (m)</label><input id="thresholdCritical" type="number" min="0" step="0.01" placeholder="—"/></div>
+        </div>
+        <div style="margin-top:8px"><label>Threshold source / reference</label><input id="thresholdSource" type="text" placeholder="Required: official advisory, station table, memo, API source…"/></div>
+        <div class="studio-actions"><button class="btn" type="button" id="saveThreshold">Save verified thresholds</button><button class="btn danger" type="button" id="clearThreshold">Clear threshold profile</button></div>
+        <div class="studio-tip">Only encode thresholds that were verified from an official government source. RiverWatch will not invent values.</div>
+      </div>
+
+      <div class="studio-actions">
+        <button class="btn primary" id="generatePoster">Generate graphic</button>
+        <button class="btn" id="useLatestReading">Use latest reading</button>
+        <button class="btn" id="downloadPoster">Export PNG</button>
+        <button class="btn" id="copyCaption">Copy caption</button>
+      </div>
+      <div class="live-note"><b>Posting safeguard:</b> verified thresholds are shown only when a source/reference has been saved. Manual or unverified data receives a visible <b>DRAFT / VERIFY SOURCE</b> watermark. ALERT/ALARM/CRITICAL must follow official thresholds or an authorized advisory.</div>
+    </div>
+    <div class="studio-preview">
+      <h3>Branded preview</h3>
+      <div class="canvas-wrap"><canvas id="posterCanvas" width="1080" height="1350"></canvas></div>
+      <div class="poster-mode-note">Built for BYDRRM Facebook/Story posting. Export remains human-approved; RiverWatch does not auto-publish.</div>
+      <div class="caption-box" id="captionPreview">Select a station and generate a graphic.</div>
+    </div>
+  </section>
+
+  <h2 class="section-title">System readiness</h2>
+  <section class="grid">
+    <div class="info">
+      <h3>✅ Station inventory</h3>
+      <p>19 Bulacan PDRRMO-documented monitoring points are loaded with coordinates and bridge/river locations.</p>
+    </div>
+    <div class="info">
+      <h3>✅ Field/manual observations</h3>
+      <p>Authorized volunteers can enter a level, timestamp, source and status. The app stores the latest and previous observation locally and calculates the rate of rise.</p>
+    </div>
+    <div class="info">
+      <h3>⏳ PhilSensors connector</h3>
+      <p>The production version should use an approved DOST-ASTI API/data-sharing route. Until then, the dashboard deliberately shows NO DATA instead of pretending to be live.</p>
+    </div>
+  </section>
+
+
+  <h2 class="section-title">Official Water-Level Guide</h2>
+  <section class="level-guide-shell" id="levelGuideSection">
+    <div class="level-guide-head">
+      <div>
+        <h3>Station-specific NORMAL / ALERT / ALARM / CRITICAL guide</h3>
+        <p>Thresholds vary by station. RiverWatch shows numeric levels only after an official source has been verified and saved.</p>
+      </div>
+      <div class="level-guide-select">
+        <label for="levelGuideStation">Monitoring station</label>
+        <select id="levelGuideStation"></select>
+      </div>
+    </div>
+    <div class="level-guide-grid">
+      <div class="level-guide-card normal"><div class="level-guide-label">🟢 NORMAL</div><div class="level-guide-value" id="guideNormal">—</div><div class="level-guide-desc">Below the official Alert / Watch threshold.</div></div>
+      <div class="level-guide-card watch"><div class="level-guide-label">🟡 ALERT / WATCH</div><div class="level-guide-value" id="guideWatch">—</div><div class="level-guide-desc">At or above Alert level, but below Alarm.</div></div>
+      <div class="level-guide-card alarm"><div class="level-guide-label">🟠 ALARM</div><div class="level-guide-value" id="guideAlarm">—</div><div class="level-guide-desc">At or above Alarm level, but below Critical.</div></div>
+      <div class="level-guide-card critical"><div class="level-guide-label">🔴 CRITICAL</div><div class="level-guide-value" id="guideCritical">—</div><div class="level-guide-desc">At or above the official Critical threshold.</div></div>
+      <div class="level-guide-card nodata"><div class="level-guide-label">⚪ NO DATA</div><div class="level-guide-value">NO READING</div><div class="level-guide-desc">No current verified observation available for the station.</div></div>
+    </div>
+    <div id="levelGuideSource" class="level-guide-source warn">Official threshold values are not yet encoded for this station. Add only verified government values in Posting Studio.</div>
+  </section>
+
+  <h2 class="section-title">Status logic</h2>
+  <section class="grid">
+    <div class="info"><h3>NORMAL / WATCH</h3><p>Use official station thresholds where available. WATCH can also be used for a verified rising condition while below an official warning threshold.</p></div>
+    <div class="info"><h3>ALARM / CRITICAL</h3><p>These labels should be driven by official thresholds or an authorized government advisory—not by an invented app threshold.</p></div>
+    <div class="info"><h3>Rate of rise</h3><p>When two timed readings exist, RiverWatch calculates meters/hour and displays rising, falling or stable trend. This is situational awareness, not a flood forecast.</p></div>
+  </section>
+
+  <footer>
+    Station inventory source: Provincial Disaster Risk Reduction and Management Office, Provincial Government of Bulacan.
+    Intended live-data source: DOST-ASTI PhilSensors / authorized government feeds.
+    This MVP is for situational awareness and testing; it does not declare structural bridge safety and must not replace official warnings or field assessment.
+  </footer>
+</main>
+
+<dialog id="updateDialog">
+  <form method="dialog" id="updateForm" class="modal">
+    <h2>Add water-level update</h2>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Monitoring station</label>
+        <select id="formStation" required></select>
+      </div>
+      <div class="field">
+        <label>Water level (meters)</label>
+        <input id="formLevel" type="number" min="0" step="0.01" required placeholder="e.g. 3.42"/>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="formStatus">
+          <option>NORMAL</option><option>WATCH</option><option>ALARM</option><option>CRITICAL</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Observation date & time</label>
+        <input id="formTime" type="datetime-local" required/>
+      </div>
+      <div class="field">
+        <label>Source</label>
+        <select id="formSource">
+          <option>Field observation</option>
+          <option>Bulacan PDRRMO</option>
+          <option>DOST-ASTI PhilSensors</option>
+          <option>PAGASA / PRFFWC</option>
+          <option>LGU / MDRRMO</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label>Verification / note</label>
+        <input id="formNote" placeholder="Optional: observer, advisory reference, gauge condition…"/>
+      </div>
+    </div>
+    <p class="small-note">For production use, manual entries should be authenticated and auditable. Demo/manual data must never be presented as an official government observation unless its source is verified.</p>
+    <div class="modal-actions">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn primary" id="saveUpdate" value="default">Save update</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app-core.js"></script>
+<script src="app-studio.js"></script>
+<script src="app-poster.js"></script>
+</body>
+</html>
