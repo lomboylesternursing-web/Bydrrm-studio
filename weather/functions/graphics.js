@@ -69,7 +69,7 @@ function classification(a, name) {
 function warningFill(a, name) {
   const c = classification(a, name);
   const palette = {
-    NONE: "#4b5358", EXPECTING: "#d8dde1", AFFECTING: "#0c79c9",
+    NONE: "#4b5358", EXPECTING: "#86BFC5", AFFECTING: "#0c79c9",
     YELLOW: "#f2c500", ORANGE: "#e55a00", RED: "#d6251f",
     TCWS1: "#f2c500", TCWS2: "#e55a00", TCWS3: "#d6251f", TCWS4: "#a32488", TCWS5: "#6d28d9"
   };
@@ -100,7 +100,7 @@ function rainfallLegend() {
     <text x="165" y="0" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#ffffff">EXPECTING</text>
     <text x="335" y="0" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#ffffff">AFFECTING</text>
     <rect x="0" y="10" width="112" height="25" fill="#4b5358" stroke="#8f969c" stroke-width="1"/>
-    <rect x="118" y="10" width="164" height="25" fill="#d8dde1" stroke="#ffffff" stroke-opacity=".75"/>
+    <rect x="118" y="10" width="164" height="25" fill="#86BFC5" stroke="#ffffff" stroke-opacity=".75"/>
     <rect x="288" y="10" width="135" height="25" fill="#0c79c9" stroke="#5eb2ed" stroke-opacity=".65"/>
     <text x="54" y="68" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" font-weight="800" fill="#ffffff">NONE</text>
     <text x="225" y="68" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" font-weight="800" fill="#ffffff">LIGHT - MODERATE</text>
