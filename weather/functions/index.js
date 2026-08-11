@@ -47,14 +47,28 @@ function list(s) {
 function keyFor(type, title, issued) {
   return `${type}-${crypto.createHash("sha1").update(`${title}|${issued}`).digest("hex").slice(0, 14)}`;
 }
-function bulacanFromSegment(seg) {
-  const m = seg.match(/Bulacan\s*\(([^)]+)\)/i);
+function bulacanFromSegment(seg = "") {
+  const m = String(seg).match(/Bulacan\s*\(([^)]+)\)/i);
   if (m) return list(m[1]);
-  if (/\bBulacan\b/i.test(seg)) {
-    const names = BULACAN.filter(n => new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(seg));
-    return names.length ? names : BULACAN.slice();
-  }
+  if (/\bBulacan\b(?!\s*\()/i.test(seg)) return BULACAN.slice();
   return [];
+}
+function rainfallContextFromBlock(block = "") {
+  let expecting = [];
+  let affecting = [];
+
+  const expectOld = block.match(/(?:Meanwhile,\s*)?expect\s+light\s+to\s+moderate(?:\s+with\s+occasional\s+heavy)?\s+rains?\s+over\s+([\s\S]*?)(?=within\s+the\s+next\s+\d+\s+hours?|Light\s+to\s+moderate(?:\s+with\s+occasional\s+heavy)?\s+rains?\s+(?:are\s+)?affecting|The\s+public|$)/i);
+  const expectAdvisory = block.match(/Light\s+to\s+moderate(?:\s+with\s+occasional\s+heavy)?\s+rains?\s+are\s+expected\s+over\s+([\s\S]*?)(?=Light\s+to\s+moderate(?:\s+with\s+occasional\s+heavy)?\s+rains?\s+(?:are\s+)?affecting|The\s+public|$)/i);
+  if (expectOld) expecting = bulacanFromSegment(expectOld[1]);
+  else if (expectAdvisory) expecting = bulacanFromSegment(expectAdvisory[1]);
+
+  const affectingMatch = block.match(/Light\s+to\s+moderate(?:\s+with\s+occasional\s+heavy)?\s+rains?\s+(?:are\s+)?affecting\s+([\s\S]*?)(?=(?:which|and)\s+may\s+(?:persist|affect)|The\s+public|$)/i);
+  if (affectingMatch) affecting = bulacanFromSegment(affectingMatch[1]);
+
+  return {
+    expecting: [...new Set(expecting)],
+    affecting: [...new Set(affecting)]
+  };
 }
 
 function parseHeavy(text) {
@@ -72,15 +86,41 @@ function parseHeavy(text) {
     const m = block.match(re);
     levels[level] = m ? bulacanFromSegment(m[1]) : [];
   }
-  const municipalities = [...new Set(Object.values(levels).flat())];
+  const rainfallContext = rainfallContextFromBlock(block);
+  const municipalities = [...new Set([...Object.values(levels).flat(), ...rainfallContext.expecting, ...rainfallContext.affecting])];
   if (!municipalities.length) return null;
   const title = `Heavy Rainfall Warning No. ${no || ""}`.trim();
   return {
     key: keyFor("heavy_rainfall", title, issued), type: "heavy_rainfall", title,
     warningNo: no || null, issuedAtText: clean(issued), weatherSystem: clean(system),
-    levels, municipalities, active: true, sourceName: "DOST-PAGASA NCR-PRSD",
+    levels, rainfallContext, municipalities, active: true, sourceName: "DOST-PAGASA NCR-PRSD",
     sourceUrl: NCR_URL, parserConfidence: issued && no?.length ? 0.99 : 0.9,
-    rawExcerpt: clean(block).slice(0, 4500)
+    rawExcerpt: clean(block).slice(0, 5000)
+  };
+}
+
+function parseRainfallAdvisory(text) {
+  const start = text.search(/Rainfall Advisory No\.\s*\d+/i);
+  if (start < 0) return null;
+  let block = text.slice(start);
+  const next = block.slice(1).search(/Rainfall Advisory No\.\s*\d+|Heavy Rainfall Warning No\.\s*\d+|Thunderstorm Advisory(?: No\.|\s)/i);
+  if (next >= 0) block = block.slice(0, next + 1);
+
+  const no = (block.match(/Rainfall Advisory No\.\s*(\d+)/i) || [])[1] || null;
+  const issued = (block.match(/Issued at:\s*([^\n]+)/i) || [])[1] || "";
+  const system = (block.match(/Weather System:\s*([^\n]+)/i) || [])[1] || "";
+  const rainfallContext = rainfallContextFromBlock(block);
+  const municipalities = [...new Set([...rainfallContext.expecting, ...rainfallContext.affecting])];
+  if (!municipalities.length) return null;
+
+  const title = no ? `Rainfall Advisory No. ${no}` : "Rainfall Advisory";
+  return {
+    key: keyFor("rainfall_advisory", title, issued), type: "rainfall_advisory", title,
+    advisoryNo: no, issuedAtText: clean(issued), weatherSystem: clean(system),
+    levels: {}, rainfallContext, municipalities, active: true,
+    sourceName: "DOST-PAGASA NCR-PRSD", sourceUrl: NCR_URL,
+    parserConfidence: issued && no ? 0.99 : 0.9,
+    rawExcerpt: clean(block).slice(0, 5000)
   };
 }
 
@@ -151,8 +191,15 @@ function caption(a) {
   const where = (a.municipalities || []).join(", ");
   let lead = `⚠️ ${a.title.toUpperCase()}\n\n`;
   if (a.type === "heavy_rainfall") {
-    const rows = Object.entries(a.levels || {}).filter(([, v]) => v.length).map(([l, v]) => `${l}: ${v.join(", ")}`).join("\n");
-    lead += `${rows}\n\n${a.weatherSystem ? `Weather System: ${a.weatherSystem}\n` : ""}`;
+    const rows = Object.entries(a.levels || {}).filter(([, v]) => v.length).map(([l, v]) => `${l}: ${v.join(", ")}`);
+    if (a.rainfallContext?.expecting?.length) rows.push(`EXPECTING: ${a.rainfallContext.expecting.join(", ")}`);
+    if (a.rainfallContext?.affecting?.length) rows.push(`AFFECTING: ${a.rainfallContext.affecting.join(", ")}`);
+    lead += `${rows.join("\n")}\n\n${a.weatherSystem ? `Weather System: ${a.weatherSystem}\n` : ""}`;
+  } else if (a.type === "rainfall_advisory") {
+    const rows = [];
+    if (a.rainfallContext?.expecting?.length) rows.push(`EXPECTING: ${a.rainfallContext.expecting.join(", ")}`);
+    if (a.rainfallContext?.affecting?.length) rows.push(`AFFECTING: ${a.rainfallContext.affecting.join(", ")}`);
+    lead += `${rows.join("\n")}\n\n${a.weatherSystem ? `Weather System: ${a.weatherSystem}\n` : ""}`;
   } else if (a.type === "tcws") {
     lead += Object.entries(a.tcwsLevels || {}).map(([l, v]) => `TCWS #${l}: ${v.join(", ")}`).join("\n") + "\n\n";
   } else {
@@ -217,7 +264,9 @@ async function runScan() {
   const result = { detected: 0, posted: 0, held: 0, failed: 0, duplicates: 0 };
   try {
     const [ncr, tc] = await Promise.all([fetchText(NCR_URL), fetchText(TC_URL)]);
-    const parsed = [parseHeavy(ncr), parseThunder(ncr), parseTCWS(tc)].filter(Boolean);
+    const heavy = parseHeavy(ncr);
+    const rainfallAdvisory = heavy ? null : parseRainfallAdvisory(ncr);
+    const parsed = [heavy, rainfallAdvisory, parseThunder(ncr), parseTCWS(tc)].filter(Boolean);
     result.detected = parsed.length;
     for (const a of parsed) {
       const r = await upsertAndMaybePost(a, { post: true });
@@ -293,4 +342,4 @@ exports.retryWeatherPost = onCall({ region: "asia-southeast1", secrets: [META_PA
   }
 });
 
-exports._test = { parseHeavy, parseThunder, parseTCWS, caption };
+exports._test = { parseHeavy, parseRainfallAdvisory, parseThunder, parseTCWS, rainfallContextFromBlock, caption };
