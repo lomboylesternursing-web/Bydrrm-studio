@@ -174,10 +174,10 @@ async function main() {
   const minGY = -maxLat;
   const maxGY = -minLat;
 
-  // Keep the approved-layout map scale exactly the same; only raise the whole
-  // PSA map and nudge it slightly right to match the approved poster position.
+  // Keep the approved-layout map scale exactly the same. This position balances
+  // the dominant map footprint without letting it crowd the title/info panel.
   // graphics.js applies translate(95 10) scale(.97) after these local coordinates.
-  const BOX = { x: 103, y: 65, w: 880, h: 760 };
+  const BOX = { x: 112, y: 90, w: 880, h: 760 };
   const sx = BOX.w / (maxGX - minGX);
   const sy = BOX.h / (maxGY - minGY);
   const scale = Math.min(sx, sy);
