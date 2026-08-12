@@ -30,6 +30,13 @@ jobs:
         run: |
           mkdir -p weather/functions/assets
           cp weather/public/assets/bydrrm-logo.png weather/functions/assets/bydrrm-logo.png
+          node <<'NODE'
+          const fs = require('fs');
+          const logo = fs.readFileSync('weather/public/assets/bydrrm-logo.png').toString('base64');
+          fs.writeFileSync('weather/functions/logoData.js', `"use strict";\nmodule.exports = ${JSON.stringify(logo)};\n`);
+          NODE
+          test -s weather/functions/assets/bydrrm-logo.png
+          test -s weather/functions/logoData.js
       - name: Install function dependencies
         working-directory: weather/functions
         run: npm install
