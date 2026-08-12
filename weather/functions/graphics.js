@@ -4,9 +4,10 @@ const path = require("path");
 const MAP = require("./mapData");
 
 let LOGO_B64 = "";
-try {
-  LOGO_B64 = fs.readFileSync(path.join(__dirname, "assets", "bydrrm-logo.png")).toString("base64");
-} catch {}
+try { LOGO_B64 = require("./logoData"); } catch {}
+if (!LOGO_B64) {
+  try { LOGO_B64 = fs.readFileSync(path.join(__dirname, "assets", "bydrrm-logo.png")).toString("base64"); } catch {}
+}
 
 function esc(s = "") {
   return String(s).replace(/[&<>\"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -76,44 +77,43 @@ function classification(a, name) {
   }
   if (a.type === "thunderstorm") return (a.municipalities || []).includes(name) ? "AFFECTING" : "NONE";
   if (a.type === "tcws") {
-    for (const [level, names] of Object.entries(a.tcwsLevels || {})) if ((names || []).includes(name)) return `TCWS${level}`;
+    for (const [level, names] of Object.entries(a.tcwsLevels || {})) {
+      if ((names || []).includes(name)) return `TCWS${level}`;
+    }
   }
   return "NONE";
 }
 function warningFill(a, name) {
-  const c = classification(a, name);
   const palette = {
     NONE: "#a7a9ac", EXPECTING: "#b8d4ec", AFFECTING: "#1978db",
     YELLOW: "#f7b819", ORANGE: "#f57c00", RED: "#d62820",
     TCWS1: "#f7b819", TCWS2: "#f57c00", TCWS3: "#d62820", TCWS4: "#a32488", TCWS5: "#6d28d9"
   };
-  return palette[c] || "#a7a9ac";
+  return palette[classification(a, name)] || palette.NONE;
 }
 
 const LABEL_SIZE = {
-  "Baliwag": 15, "Bustos": 15, "Pulilan": 15, "Plaridel": 15, "Pandi": 15,
-  "Guiguinto": 14, "Balagtas": 14, "Bocaue": 14, "Malolos": 15, "Paombong": 14,
-  "Hagonoy": 15, "Bulakan": 14, "Marilao": 14, "Meycauayan": 13, "Obando": 13,
-  "Santa Maria": 15, "Angat": 15, "Calumpit": 15, "San Jose del Monte": 15,
-  "Doña Remedios Trinidad": 17, "San Miguel": 17, "San Ildefonso": 16, "San Rafael": 16
+  "Baliwag": 17, "Bustos": 17, "Pulilan": 17, "Plaridel": 17, "Pandi": 17,
+  "Guiguinto": 16, "Balagtas": 16, "Bocaue": 16, "Malolos": 17, "Paombong": 16,
+  "Hagonoy": 17, "Bulakan": 16, "Marilao": 16, "Meycauayan": 15, "Obando": 15,
+  "Santa Maria": 17, "Angat": 17, "Calumpit": 17, "San Jose del Monte": 17,
+  "Doña Remedios Trinidad": 19, "San Miguel": 19, "San Ildefonso": 18, "San Rafael": 18,
+  "Norzagaray": 18
 };
 function labelSvg(name, x, y) {
-  const size = LABEL_SIZE[name] || (name.length > 15 ? 15 : 16);
-  let lines = [name];
-  if (name === "Doña Remedios Trinidad") lines = ["Doña Remedios Trinidad"];
-  const firstY = y - (lines.length - 1) * 9;
-  return `<text x="${x}" y="${firstY}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${size}" font-weight="800" fill="#ffffff" stroke="#07111a" stroke-width="2.25" paint-order="stroke" stroke-linejoin="round">${lines.map((line, i) => `<tspan x="${x}" dy="${i ? 18 : 0}">${esc(line)}</tspan>`).join("")}</text>`;
+  const size = LABEL_SIZE[name] || (name.length > 15 ? 17 : 18);
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="${size}" font-weight="700" fill="#ffffff" stroke="#07111a" stroke-width="2.05" paint-order="stroke" stroke-linejoin="round" style="text-rendering:geometricPrecision">${esc(name)}</text>`;
 }
 function mapSvg(a) {
   let shapes = "", labels = "";
   for (const [name, item] of Object.entries(MAP.municipalities)) {
     const fill = warningFill(a, name);
     for (const d of item.paths || []) {
-      shapes += `<path d="${d}" fill="${fill}" stroke="#f1f4f6" stroke-opacity=".88" stroke-width="0.82" vector-effect="non-scaling-stroke"/>`;
+      shapes += `<path d="${d}" fill="${fill}" stroke="#f4f6f7" stroke-opacity=".82" stroke-width="0.78" vector-effect="non-scaling-stroke"/>`;
     }
     labels += labelSvg(name, item.label[0], item.label[1]);
   }
-  return `<g transform="translate(116 104) scale(.90)">${shapes}${labels}</g>`;
+  return `<g transform="translate(42 -42) scale(.98)">${shapes}${labels}</g>`;
 }
 
 function weatherIcon(x, y, scale = 1) {
@@ -127,63 +127,24 @@ function rainBadgeIcon(x, y) {
 }
 
 function rainfallLegend() {
-  return `<g transform="translate(24 908)">
-    <rect x="0" y="0" width="1032" height="148" rx="14" fill="#091726" fill-opacity=".94" stroke="#7890a2" stroke-opacity=".56" stroke-width="1"/>
-    <text x="285" y="30" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" font-weight="900" letter-spacing="1" fill="#f5f7f9">RAINFALL OUTLOOK</text>
-    <text x="785" y="30" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" font-weight="900" letter-spacing=".4" fill="#f5f7f9">HEAVY RAINFALL WARNING</text>
-    <line x1="540" y1="22" x2="540" y2="132" stroke="#96a7b4" stroke-opacity=".62" stroke-width="1"/>
+  return `<g transform="translate(24 906)">
+    <rect x="0" y="0" width="1032" height="150" rx="14" fill="#081625" fill-opacity=".94" stroke="#7f94a4" stroke-opacity=".62" stroke-width="0.9"/>
+    <text x="286" y="31" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="23" font-weight="700" letter-spacing=".8" fill="#f5f7f9">RAINFALL OUTLOOK</text>
+    <text x="786" y="31" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing=".35" fill="#f5f7f9">HEAVY RAINFALL WARNING</text>
+    <line x1="540" y1="23" x2="540" y2="134" stroke="#9baab6" stroke-opacity=".62" stroke-width="0.9"/>
 
-    <g transform="translate(16 43)">
-      <rect width="158" height="90" rx="10" fill="#0d1d2c" stroke="#42586a"/>
-      <rect x="12" y="16" width="39" height="58" rx="5" fill="#a7a9ac"/>
-      <text x="62" y="31" font-family="Arial,sans-serif" font-size="16" font-weight="900" fill="#ffffff">NONE</text>
-      <text x="62" y="52" font-family="Arial,sans-serif" font-size="11" fill="#d0d8de">No rainfall</text>
-      <text x="62" y="68" font-family="Arial,sans-serif" font-size="11" fill="#d0d8de">to be expected.</text>
-    </g>
-    <g transform="translate(184 43)">
-      <rect width="168" height="90" rx="10" fill="#0d1d2c" stroke="#42586a"/>
-      <rect x="12" y="16" width="39" height="58" rx="5" fill="#b8d4ec"/>
-      <text x="62" y="31" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#ffffff">EXPECTING</text>
-      <text x="62" y="52" font-family="Arial,sans-serif" font-size="11" fill="#d0d8de">Rainfall is</text>
-      <text x="62" y="68" font-family="Arial,sans-serif" font-size="11" fill="#d0d8de">expected.</text>
-    </g>
-    <g transform="translate(362 43)">
-      <rect width="160" height="90" rx="10" fill="#0d1d2c" stroke="#42586a"/>
-      <rect x="12" y="16" width="39" height="58" rx="5" fill="#1978db"/>
-      <text x="62" y="31" font-family="Arial,sans-serif" font-size="15" font-weight="900" fill="#ffffff">AFFECTING</text>
-      <text x="62" y="52" font-family="Arial,sans-serif" font-size="11" fill="#d0d8de">Rainfall is</text>
-      <text x="62" y="68" font-family="Arial,sans-serif" font-size="11" fill="#d0d8de">occurring.</text>
-    </g>
+    <g transform="translate(16 43)"><rect width="158" height="92" rx="10" fill="#0c1c2b" stroke="#435a6c"/><rect x="12" y="16" width="39" height="59" rx="5" fill="#a7a9ac"/><text x="62" y="31" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" font-weight="700" fill="#fff">NONE</text><text x="62" y="52" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#d4dbe0">No rainfall</text><text x="62" y="68" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#d4dbe0">to be expected.</text></g>
+    <g transform="translate(184 43)"><rect width="168" height="92" rx="10" fill="#0c1c2b" stroke="#435a6c"/><rect x="12" y="16" width="39" height="59" rx="5" fill="#b8d4ec"/><text x="62" y="31" font-family="DejaVu Sans,Arial,sans-serif" font-size="15" font-weight="700" fill="#fff">EXPECTING</text><text x="62" y="52" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#d4dbe0">Rainfall is</text><text x="62" y="68" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#d4dbe0">expected.</text></g>
+    <g transform="translate(362 43)"><rect width="160" height="92" rx="10" fill="#0c1c2b" stroke="#435a6c"/><rect x="12" y="16" width="39" height="59" rx="5" fill="#1978db"/><text x="62" y="31" font-family="DejaVu Sans,Arial,sans-serif" font-size="15" font-weight="700" fill="#fff">AFFECTING</text><text x="62" y="52" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#d4dbe0">Rainfall is</text><text x="62" y="68" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#d4dbe0">occurring.</text></g>
 
-    <g transform="translate(562 43)">
-      <rect width="142" height="90" rx="10" fill="#0d1d2c" stroke="#c49b21"/>
-      <rect width="142" height="32" rx="10" fill="#f7b819"/><rect y="22" width="142" height="10" fill="#f7b819"/>
-      <text x="71" y="22" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#ffffff">YELLOW</text>
-      <text x="71" y="55" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#ffffff">7.5 - 15</text>
-      <text x="71" y="71" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#e2e7eb">mm/hour</text>
-      <text x="71" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="900" fill="#ffffff">HEAVY</text>
-    </g>
-    <g transform="translate(714 43)">
-      <rect width="142" height="90" rx="10" fill="#0d1d2c" stroke="#b25a22"/>
-      <rect width="142" height="32" rx="10" fill="#f57c00"/><rect y="22" width="142" height="10" fill="#f57c00"/>
-      <text x="71" y="22" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#ffffff">ORANGE</text>
-      <text x="71" y="55" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#ffffff">15 - 30</text>
-      <text x="71" y="71" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#e2e7eb">mm/hour</text>
-      <text x="71" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="900" fill="#ffffff">INTENSE</text>
-    </g>
-    <g transform="translate(866 43)">
-      <rect width="142" height="90" rx="10" fill="#0d1d2c" stroke="#a33631"/>
-      <rect width="142" height="32" rx="10" fill="#d62820"/><rect y="22" width="142" height="10" fill="#d62820"/>
-      <text x="71" y="22" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#ffffff">RED</text>
-      <text x="71" y="55" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="900" fill="#ffffff">&gt; 30</text>
-      <text x="71" y="71" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#e2e7eb">mm/hour</text>
-      <text x="71" y="87" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="900" fill="#ffffff">TORRENTIAL</text>
-    </g>
+    <g transform="translate(562 43)"><rect width="142" height="92" rx="10" fill="#0c1c2b" stroke="#c49b21"/><rect width="142" height="33" rx="10" fill="#f7b819"/><rect y="23" width="142" height="10" fill="#f7b819"/><text x="71" y="23" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="700" fill="#fff">YELLOW</text><text x="71" y="57" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="14" font-weight="700" fill="#fff">7.5 - 15</text><text x="71" y="73" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#e5e9ec">mm/hour</text><text x="71" y="89" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" font-weight="700" fill="#fff">HEAVY</text></g>
+    <g transform="translate(714 43)"><rect width="142" height="92" rx="10" fill="#0c1c2b" stroke="#b25a22"/><rect width="142" height="33" rx="10" fill="#f57c00"/><rect y="23" width="142" height="10" fill="#f57c00"/><text x="71" y="23" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="700" fill="#fff">ORANGE</text><text x="71" y="57" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="14" font-weight="700" fill="#fff">15 - 30</text><text x="71" y="73" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#e5e9ec">mm/hour</text><text x="71" y="89" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" font-weight="700" fill="#fff">INTENSE</text></g>
+    <g transform="translate(866 43)"><rect width="142" height="92" rx="10" fill="#0c1c2b" stroke="#a33631"/><rect width="142" height="33" rx="10" fill="#d62820"/><rect y="23" width="142" height="10" fill="#d62820"/><text x="71" y="23" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="18" font-weight="700" fill="#fff">RED</text><text x="71" y="57" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="14" font-weight="700" fill="#fff">&gt; 30</text><text x="71" y="73" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" fill="#e5e9ec">mm/hour</text><text x="71" y="89" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="11" font-weight="700" fill="#fff">TORRENTIAL</text></g>
   </g>`;
 }
 
 function genericLegend(a) {
-  return `<g transform="translate(38 910)"><rect width="1004" height="120" rx="16" fill="#0b1724" fill-opacity=".9" stroke="#52687a" stroke-opacity=".65"/><text x="26" y="42" font-family="Arial,sans-serif" font-size="22" font-weight="800" fill="#ffffff">${esc(a.title || "Official Advisory")}</text><text x="26" y="76" font-family="Arial,sans-serif" font-size="15" fill="#aebdca">Affected Bulacan areas are highlighted on the municipal map.</text><text x="26" y="101" font-family="Arial,sans-serif" font-size="13" fill="#7f93a4">Source: ${esc(a.sourceName || "DOST-PAGASA")}</text></g>`;
+  return `<g transform="translate(38 910)"><rect width="1004" height="120" rx="16" fill="#0b1724" fill-opacity=".9" stroke="#52687a" stroke-opacity=".65"/><text x="26" y="42" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="700" fill="#ffffff">${esc(a.title || "Official Advisory")}</text><text x="26" y="76" font-family="DejaVu Sans,Arial,sans-serif" font-size="15" fill="#aebdca">Affected Bulacan areas are highlighted on the municipal map.</text><text x="26" y="101" font-family="DejaVu Sans,Arial,sans-serif" font-size="13" fill="#7f93a4">Source: ${esc(a.sourceName || "DOST-PAGASA")}</text></g>`;
 }
 
 function titleLines(a) {
@@ -198,49 +159,50 @@ function graphicSvg(a) {
   const rainfall = ["heavy_rainfall", "rainfall_advisory"].includes(a.type);
   const parts = issuedParts(a.issuedAtText);
   const [line1, line2] = titleLines(a);
-  const titleSize1 = line1.length > 12 ? 58 : 84;
-  const titleSize2 = line2.length > 12 ? 56 : 76;
+  const titleSize1 = line1.length > 12 ? 66 : 108;
+  const titleSize2 = line2.length > 12 ? 62 : 92;
   const sub = a.type === "heavy_rainfall" && a.warningNo ? `WARNING NO. ${esc(a.warningNo)}` : a.type === "rainfall_advisory" && a.advisoryNo ? `ADVISORY NO. ${esc(a.advisoryNo)}` : "OFFICIAL ADVISORY";
-  const logo = LOGO_B64 ? `<image href="data:image/png;base64,${LOGO_B64}" x="866" y="20" width="176" height="150" preserveAspectRatio="xMidYMid meet"/>` : "";
+  const logo = LOGO_B64 ? `<image href="data:image/png;base64,${LOGO_B64}" x="878" y="18" width="164" height="154" preserveAspectRatio="xMidYMid meet"/>` : "";
   const sys = systemLines(a.weatherSystem || "");
   const legend = rainfall ? rainfallLegend() : genericLegend(a);
 
-  return `<svg width="1080" height="1080" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="2160" height="2160" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
     <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#04111f"/><stop offset=".55" stop-color="#092039"/><stop offset="1" stop-color="#061626"/></linearGradient>
-      <radialGradient id="glow" cx="18%" cy="47%" r="60%"><stop stop-color="#1b557c" stop-opacity=".20"/><stop offset="1" stop-color="#1b557c" stop-opacity="0"/></radialGradient>
-      <pattern id="rain" width="38" height="38" patternUnits="userSpaceOnUse" patternTransform="rotate(17)"><line x1="0" y1="0" x2="0" y2="16" stroke="#d3e1ea" stroke-opacity=".035" stroke-width="1"/></pattern>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#04111f"/><stop offset=".54" stop-color="#092039"/><stop offset="1" stop-color="#061626"/></linearGradient>
+      <radialGradient id="glow" cx="18%" cy="47%" r="60%"><stop stop-color="#1b557c" stop-opacity=".18"/><stop offset="1" stop-color="#1b557c" stop-opacity="0"/></radialGradient>
+      <pattern id="rain" width="38" height="38" patternUnits="userSpaceOnUse" patternTransform="rotate(17)"><line x1="0" y1="0" x2="0" y2="16" stroke="#d3e1ea" stroke-opacity=".03" stroke-width=".8"/></pattern>
+      <filter id="titleShadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity=".34"/></filter>
     </defs>
     <rect width="1080" height="1080" fill="url(#bg)"/>
     <rect width="1080" height="1080" fill="url(#rain)"/>
     <ellipse cx="130" cy="620" rx="430" ry="325" fill="url(#glow)"/>
-    <rect x="12" y="12" width="1056" height="1056" rx="18" fill="none" stroke="#9db1bf" stroke-opacity=".42" stroke-width="0.85"/>
+    <rect x="12" y="12" width="1056" height="1056" rx="18" fill="none" stroke="#9db1bf" stroke-opacity=".42" stroke-width=".8"/>
 
     ${mapSvg(a)}
     ${logo}
 
-    <text x="30" y="51" font-family="Arial,sans-serif" font-size="29" font-weight="300" letter-spacing="5.2" fill="#f0f2f4">BULACAN</text>
-    <line x1="180" y1="43" x2="528" y2="43" stroke="#70879a" stroke-opacity=".65"/>
-    <circle cx="530" cy="43" r="2.8" fill="#35b8ff"/>
-    <text x="28" y="142" font-family="Arial,sans-serif" font-size="${titleSize1}" font-weight="900" fill="#ffffff">${esc(line1)}</text>
-    <text x="28" y="220" font-family="Arial,sans-serif" font-size="${titleSize2}" font-weight="900" fill="#ffffff">${esc(line2)}</text>
+    <text x="30" y="51" font-family="DejaVu Sans,Arial,sans-serif" font-size="29" font-weight="300" letter-spacing="5.2" fill="#f0f2f4">BULACAN</text>
+    <line x1="181" y1="43" x2="528" y2="43" stroke="#70879a" stroke-opacity=".66" stroke-width=".9"/>
+    <circle cx="530" cy="43" r="2.5" fill="#35b8ff"/>
+    <text x="28" y="151" font-family="DejaVu Sans,Arial,sans-serif" font-size="${titleSize1}" font-weight="700" letter-spacing="-2" fill="#ffffff" filter="url(#titleShadow)">${esc(line1)}</text>
+    <text x="28" y="231" font-family="DejaVu Sans,Arial,sans-serif" font-size="${titleSize2}" font-weight="700" letter-spacing="-1.2" fill="#ffffff" filter="url(#titleShadow)">${esc(line2)}</text>
 
-    <g transform="translate(28 236)">
-      <rect width="392" height="56" rx="10" fill="#071c2f" fill-opacity=".97" stroke="#1189d0" stroke-opacity=".95" stroke-width="1.2"/>
+    <g transform="translate(28 247)">
+      <rect width="360" height="56" rx="10" fill="#071c2f" fill-opacity=".97" stroke="#1189d0" stroke-opacity=".95" stroke-width="1.15"/>
       ${rainBadgeIcon(8, 5)}
-      <text x="66" y="36" font-family="Arial,sans-serif" font-size="24" font-weight="900" letter-spacing=".6" fill="#ffffff">${sub}</text>
+      <text x="66" y="36" font-family="DejaVu Sans,Arial,sans-serif" font-size="24" font-weight="700" letter-spacing=".4" fill="#ffffff">${sub}</text>
     </g>
 
-    <g transform="translate(28 310)">
-      <rect width="392" height="214" rx="15" fill="#0b1d30" fill-opacity=".91" stroke="#47657a" stroke-opacity=".82"/>
+    <g transform="translate(28 319)">
+      <rect width="370" height="212" rx="15" fill="#0b1d30" fill-opacity=".91" stroke="#47657a" stroke-opacity=".82" stroke-width=".95"/>
       ${clockIcon(18, 20)}
-      <text x="104" y="72" font-family="Arial,sans-serif" font-size="48" font-weight="900" fill="#ffffff">${esc(parts.time)}</text>
-      <text x="104" y="107" font-family="Arial,sans-serif" font-size="22" font-weight="800" letter-spacing="1.05" fill="#f0f3f5">${esc(parts.date)}</text>
-      <line x1="20" y1="125" x2="372" y2="125" stroke="#425f75" stroke-opacity=".58"/>
+      <text x="104" y="72" font-family="DejaVu Sans,Arial,sans-serif" font-size="52" font-weight="700" fill="#ffffff">${esc(parts.time)}</text>
+      <text x="104" y="107" font-family="DejaVu Sans,Arial,sans-serif" font-size="22" font-weight="700" letter-spacing=".8" fill="#f0f3f5">${esc(parts.date)}</text>
+      <line x1="20" y1="125" x2="350" y2="125" stroke="#425f75" stroke-opacity=".58" stroke-width=".9"/>
       ${weatherIcon(25, 145, .80)}
-      ${sys.map((line, i) => `<text x="102" y="${163 + i * 27}" font-family="Arial,sans-serif" font-size="${i ? 19 : 21}" font-weight="${i ? 700 : 800}" fill="#f4f6f8">${esc(line)}</text>`).join("")}
+      ${sys.map((line, i) => `<text x="102" y="${163 + i * 27}" font-family="DejaVu Sans,Arial,sans-serif" font-size="${i ? 19 : 21}" font-weight="700" fill="#f4f6f8">${esc(line)}</text>`).join("")}
     </g>
-    <text x="30" y="550" font-family="Arial,sans-serif" font-size="16" fill="#aeb9c2">Source: PAGASA (NCR PRSD)</text>
+    <text x="30" y="557" font-family="DejaVu Sans,Arial,sans-serif" font-size="16" fill="#aeb9c2">Source: PAGASA (NCR PRSD)</text>
 
     ${legend}
   </svg>`;
