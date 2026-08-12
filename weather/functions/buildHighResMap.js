@@ -21,24 +21,12 @@ CANON.set(key("City of Meycauayan"), "Meycauayan");
 CANON.set(key("City of San Jose Del Monte"), "San Jose del Monte");
 CANON.set(key("Dona Remedios Trinidad"), "Doña Remedios Trinidad");
 
-// Tiny visual nudges only; geometry remains untouched. These keep labels readable
-// in the dense central/southern part of Bulacan.
 const LABEL_OFFSETS = {
-  "Baliwag": [-3, -8],
-  "Bustos": [7, -5],
-  "Pulilan": [-8, -4],
-  "Plaridel": [-7, 4],
-  "Pandi": [7, 3],
-  "Guiguinto": [-8, 8],
-  "Balagtas": [6, 9],
-  "Bocaue": [5, 11],
-  "Malolos": [-8, 1],
-  "Paombong": [-10, 5],
-  "Bulakan": [-2, 10],
-  "Marilao": [10, 8],
-  "Meycauayan": [12, 11],
-  "Obando": [0, 11],
-  "Santa Maria": [10, 1],
+  "Baliwag": [-3, -8], "Bustos": [7, -5], "Pulilan": [-8, -4],
+  "Plaridel": [-7, 4], "Pandi": [7, 3], "Guiguinto": [-8, 8],
+  "Balagtas": [6, 9], "Bocaue": [5, 11], "Malolos": [-8, 1],
+  "Paombong": [-10, 5], "Bulakan": [-2, 10], "Marilao": [10, 8],
+  "Meycauayan": [12, 11], "Obando": [0, 11], "Santa Maria": [10, 1],
   "San Jose del Monte": [14, 5]
 };
 
@@ -54,6 +42,14 @@ function key(value = "") {
 
 function canonical(value) {
   return CANON.get(key(value)) || null;
+}
+
+function prop(properties, wanted) {
+  if (!properties) return undefined;
+  if (Object.prototype.hasOwnProperty.call(properties, wanted)) return properties[wanted];
+  const target = wanted.toLowerCase();
+  const found = Object.keys(properties).find(k => k.toLowerCase() === target);
+  return found ? properties[found] : undefined;
 }
 
 function ringsFromGeometry(geometry) {
@@ -109,7 +105,7 @@ function geometryCenter(geometry) {
 
 async function main() {
   const params = new URLSearchParams({
-    where: "prov_name='BULACAN'",
+    where: "prov_name='Bulacan' OR prov_name='BULACAN'",
     outFields: "city_name,city_code,psgc_10d,prov_name,centroid_x,centriod_y",
     returnGeometry: "true",
     outSR: "4326",
@@ -123,10 +119,15 @@ async function main() {
   if (geojson?.type !== "FeatureCollection" || !Array.isArray(geojson.features)) {
     throw new Error("PSA service did not return a GeoJSON FeatureCollection.");
   }
+  console.log(`PSA returned ${geojson.features.length} feature(s).`);
+  if (geojson.features[0]?.properties) {
+    console.log("PSA property keys:", Object.keys(geojson.features[0].properties).join(", "));
+  }
 
   const byName = new Map();
   for (const feature of geojson.features) {
-    const name = canonical(feature?.properties?.city_name);
+    const rawName = prop(feature?.properties, "city_name");
+    const name = canonical(rawName);
     if (!name || !feature?.geometry) continue;
     if (byName.has(name)) throw new Error(`Duplicate municipal feature: ${name}`);
     byName.set(name, feature);
@@ -135,7 +136,8 @@ async function main() {
   const missing = EXPECTED.filter(name => !byName.has(name));
   const extras = [...byName.keys()].filter(name => !EXPECTED.includes(name));
   if (missing.length || extras.length || byName.size !== 24) {
-    throw new Error(`Expected 24 Bulacan LGUs; got ${byName.size}. Missing: ${missing.join(", ") || "none"}; extra: ${extras.join(", ") || "none"}`);
+    const samples = geojson.features.slice(0, 8).map(f => String(prop(f?.properties, "city_name") || "(no city_name)")).join(" | ");
+    throw new Error(`Expected 24 Bulacan LGUs; got ${byName.size}. Missing: ${missing.join(", ") || "none"}; extra: ${extras.join(", ") || "none"}; sample names: ${samples}`);
   }
 
   let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
@@ -146,7 +148,6 @@ async function main() {
     });
   }
 
-  // Equirectangular projection with longitude corrected for Bulacan latitude.
   const midLat = (minLat + maxLat) / 2;
   const cosLat = Math.cos(midLat * Math.PI / 180);
   const minGX = minLon * cosLat;
@@ -154,8 +155,8 @@ async function main() {
   const minGY = -maxLat;
   const maxGY = -minLat;
 
-  // Local coordinate box chosen to preserve the approved live composition.
-  // graphics.js applies translate(95 10) scale(.97) after this.
+  // Preserve the already-approved live composition while replacing only geometry.
+  // graphics.js applies translate(95 10) scale(.97) after these local coordinates.
   const BOX = { x: 58, y: 262, w: 700, h: 612 };
   const sx = BOX.w / (maxGX - minGX);
   const sy = BOX.h / (maxGY - minGY);
@@ -200,14 +201,14 @@ async function main() {
     if (!paths.length) throw new Error(`No valid polygon paths for ${name}`);
 
     let center;
-    const cx = Number(feature.properties?.centroid_x);
-    const cy = Number(feature.properties?.centriod_y);
+    const cx = Number(prop(feature.properties, "centroid_x"));
+    const cy = Number(prop(feature.properties, "centriod_y"));
     if (Number.isFinite(cx) && Number.isFinite(cy)) center = project([cx, cy]);
     else center = project(geometryCenter(feature.geometry));
 
     const [dx, dy] = LABEL_OFFSETS[name] || [0, 0];
     municipalities[name] = {
-      psgc: String(feature.properties?.psgc_10d || feature.properties?.city_code || ""),
+      psgc: String(prop(feature.properties, "psgc_10d") || prop(feature.properties, "city_code") || ""),
       paths,
       label: [round2(center[0] + dx), round2(center[1] + dy)]
     };
