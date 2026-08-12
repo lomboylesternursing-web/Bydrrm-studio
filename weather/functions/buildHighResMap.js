@@ -24,13 +24,29 @@ CANON.set(key("City of Meycauayan"), "Meycauayan");
 CANON.set(key("City of San Jose Del Monte"), "San Jose del Monte");
 CANON.set(key("Dona Remedios Trinidad"), "Doña Remedios Trinidad");
 
+// Manual label nudges only. These do not alter any PSA municipal geometry.
+// The dense central/southern municipalities need separate visual centering
+// for a social-media graphic rather than strict polygon-bounds centering.
 const LABEL_OFFSETS = {
-  "Baliwag": [-3, -8], "Bustos": [7, -5], "Pulilan": [-8, -4],
-  "Plaridel": [-7, 4], "Pandi": [7, 3], "Guiguinto": [-8, 8],
-  "Balagtas": [6, 9], "Bocaue": [5, 11], "Malolos": [-8, 1],
-  "Paombong": [-10, 5], "Bulakan": [-2, 10], "Marilao": [10, 8],
-  "Meycauayan": [12, 11], "Obando": [0, 11], "Santa Maria": [10, 1],
-  "San Jose del Monte": [14, 5]
+  "Baliwag": [-8, -12],
+  "Bustos": [7, -8],
+  "Pulilan": [-12, -6],
+  "Plaridel": [-11, 2],
+  "Pandi": [9, 0],
+  "Guiguinto": [4, 3],
+  "Balagtas": [10, 12],
+  "Bocaue": [8, 16],
+  "Malolos": [-17, -3],
+  "Paombong": [-16, 9],
+  "Hagonoy": [-8, -2],
+  "Bulakan": [-12, 14],
+  "Marilao": [13, 5],
+  "Meycauayan": [17, 15],
+  "Obando": [-4, 17],
+  "Santa Maria": [15, -3],
+  "San Jose del Monte": [18, 8],
+  "Calumpit": [-8, 0],
+  "Angat": [5, -5]
 };
 
 function key(value = "") {
@@ -158,9 +174,10 @@ async function main() {
   const minGY = -maxLat;
   const maxGY = -minLat;
 
-  // Preserve the already-approved live composition while replacing only geometry.
-  // graphics.js applies translate(95 10) scale(.97) after these local coordinates.
-  const BOX = { x: 58, y: 262, w: 700, h: 612 };
+  // Slightly smaller and farther right than the first PSA render so the map
+  // clears the information panel while preserving the approved poster balance.
+  // graphics.js still applies translate(95 10) scale(.97) after this.
+  const BOX = { x: 82, y: 275, w: 672, h: 590 };
   const sx = BOX.w / (maxGX - minGX);
   const sy = BOX.h / (maxGY - minGY);
   const scale = Math.min(sx, sy);
