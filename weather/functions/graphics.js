@@ -114,7 +114,7 @@ function mapSvg(a) {
     }
     labels += labelSvg(name, item.label[0], item.label[1]);
   }
-  return `<g transform="translate(110 15) scale(.94)">${shapes}${labels}</g>`;
+  return `<g transform="translate(95 10) scale(.97)">${shapes}${labels}</g>`;
 }
 
 function weatherIcon(x, y, scale = 1) {
