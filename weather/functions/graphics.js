@@ -103,14 +103,14 @@ function labelSvg(name, x, y) {
   if (name === "Doña Remedios Trinidad") lines = ["Doña Remedios", "Trinidad"];
   if (name === "San Jose del Monte") lines = ["San Jose del Monte"];
   const firstY = y - (lines.length - 1) * 9;
-  return `<text x="${x}" y="${firstY}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${size}" font-weight="700" fill="#ffffff" stroke="#07111b" stroke-width="3.1" paint-order="stroke" stroke-linejoin="round">${lines.map((line, i) => `<tspan x="${x}" dy="${i ? 18 : 0}">${esc(line)}</tspan>`).join("")}</text>`;
+  return `<text x="${x}" y="${firstY}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${size}" font-weight="800" fill="#ffffff" stroke="#06101a" stroke-width="1.9" paint-order="stroke" stroke-linejoin="round">${lines.map((line, i) => `<tspan x="${x}" dy="${i ? 18 : 0}">${esc(line)}</tspan>`).join("")}</text>`;
 }
 function mapSvg(a) {
   let shapes = "", labels = "";
   for (const [name, item] of Object.entries(MAP.municipalities)) {
     const fill = warningFill(a, name);
     for (const d of item.paths || []) {
-      shapes += `<path d="${d}" fill="${fill}" stroke="#e5ebef" stroke-opacity=".9" stroke-width="1.35" vector-effect="non-scaling-stroke"/>`;
+      shapes += `<path d="${d}" fill="${fill}" stroke="#e6edf1" stroke-opacity=".72" stroke-width="0.82" vector-effect="non-scaling-stroke"/>`;
     }
     labels += labelSvg(name, item.label[0], item.label[1]);
   }
@@ -217,7 +217,7 @@ function graphicSvg(a) {
     <rect width="1080" height="1080" fill="url(#grid)"/>
     <rect width="1080" height="1080" fill="url(#rain)"/>
     <ellipse cx="145" cy="590" rx="420" ry="300" fill="url(#glow)"/>
-    <rect x="16" y="16" width="1048" height="1048" rx="18" fill="none" stroke="#9fb2c0" stroke-opacity=".48" stroke-width="1.2"/>
+    <rect x="16" y="16" width="1048" height="1048" rx="18" fill="none" stroke="#9fb2c0" stroke-opacity=".38" stroke-width="0.8"/>
 
     ${mapSvg(a)}
     ${logo}
