@@ -77,17 +77,37 @@ async function load() {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   $("#kpiPosts").textContent = latestRows.filter(x => postedToday(x, today)).length;
 
-  $("#activityRows").innerHTML = latestRows.map(a => {
+  $("#activityRows").innerHTML = latestRows.map((a, index) => {
     const verified = a.parserConfidence >= 0.95;
     const canPreview = profile?.role === "admin" && verified;
-    const canTestPost = profile?.role === "admin" && verified && ["held", "failed"].includes(a.postStatus);
-    const errorLine = a.postStatus === "failed" && a.postError
-      ? `<br><span style="display:inline-block;margin-top:6px;color:#ff9a9a;font-size:11px;max-width:260px">${esc(a.postError)}</span>`
-      : "";
+    const hasNewerVerified = latestRows.slice(0, index).some(x => x.parserConfidence >= 0.95);
+    const historicalFailed = a.postStatus === "failed" && hasNewerVerified;
+    const canTestPost = profile?.role === "admin" && verified && !historicalFailed && ["held", "failed"].includes(a.postStatus);
+
+    let facebookLabel = (a.postStatus || "not posted").toUpperCase();
+    let facebookClass = a.postStatus === "posted" ? "ok" : a.postStatus === "failed" && !historicalFailed ? "fail" : "";
+    let facebookStyle = "";
+
+    if (!settings.autoPostEnabled && ["pending", "held"].includes(a.postStatus)) {
+      facebookLabel = "WAITING · AUTO-POST OFF";
+      facebookStyle = "color:#d7e1ea";
+    } else if (historicalFailed) {
+      facebookLabel = "PREVIOUS FAILED ATTEMPT";
+      facebookClass = "";
+      facebookStyle = "color:#8fa1b4";
+    }
+
+    let errorLine = "";
+    if (a.postStatus === "failed" && a.postError) {
+      if (historicalFailed) {
+        errorLine = `<details style="margin-top:7px;max-width:230px;color:#8fa1b4;font-size:11px"><summary style="cursor:pointer;color:#9fb0bf">View old error</summary><div style="margin-top:6px;line-height:1.35;overflow-wrap:anywhere">${esc(a.postError)}</div></details>`;
+      } else {
+        errorLine = `<br><span style="display:inline-block;margin-top:6px;color:#ff9a9a;font-size:11px;max-width:230px;line-height:1.35;overflow-wrap:anywhere">${esc(a.postError)}</span>`;
+      }
+    }
+
     const facebookCell = `
-      <span class="${a.postStatus === "posted" ? "ok" : a.postStatus === "failed" ? "fail" : ""}">
-        ${esc((a.postStatus || "not posted").toUpperCase())}
-      </span>
+      <span class="${facebookClass}" style="${facebookStyle}">${esc(facebookLabel)}</span>
       ${errorLine}
       ${canPreview ? `<br><button class="btn secondary preview-graphic" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">Preview graphic</button>` : ""}
       ${canTestPost ? `<br><button class="btn secondary test-post" data-id="${esc(a.id)}" style="margin-top:6px;padding:7px 10px;font-size:12px">${a.postStatus === "failed" ? "Retry test" : "Publish test"}</button>` : ""}
