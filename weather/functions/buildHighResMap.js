@@ -15,7 +15,10 @@ const EXPECTED = [
 ];
 
 const CANON = new Map(EXPECTED.map(name => [key(name), name]));
+CANON.set(key("Baliuag"), "Baliwag");
+CANON.set(key("City of Baliuag"), "Baliwag");
 CANON.set(key("City of Baliwag"), "Baliwag");
+CANON.set(key("Bulacan"), "Bulakan");
 CANON.set(key("City of Malolos"), "Malolos");
 CANON.set(key("City of Meycauayan"), "Meycauayan");
 CANON.set(key("City of San Jose Del Monte"), "San Jose del Monte");
