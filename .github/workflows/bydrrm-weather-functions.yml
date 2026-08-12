@@ -40,6 +40,11 @@ jobs:
       - name: Install function dependencies
         working-directory: weather/functions
         run: npm install
+      - name: Build high-resolution Bulacan map
+        working-directory: weather/functions
+        run: |
+          node buildHighResMap.js
+          test -s mapData.js
       - name: Run parser tests
         working-directory: weather/functions
         run: npm test
