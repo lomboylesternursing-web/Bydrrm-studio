@@ -174,11 +174,10 @@ async function main() {
   const minGY = -maxLat;
   const maxGY = -minLat;
 
-  // Approved-layout scale: keep the exact PSA geometry, but give the map the
-  // same dominant visual footprint as the approved BYDRRM poster. The map is
-  // larger, higher, and slightly farther right while still clearing the legend.
+  // Keep the approved-layout map scale exactly the same; only raise the whole
+  // PSA map and nudge it slightly right to match the approved poster position.
   // graphics.js applies translate(95 10) scale(.97) after these local coordinates.
-  const BOX = { x: 95, y: 115, w: 880, h: 760 };
+  const BOX = { x: 103, y: 65, w: 880, h: 760 };
   const sx = BOX.w / (maxGX - minGX);
   const sy = BOX.h / (maxGY - minGY);
   const scale = Math.min(sx, sy);
