@@ -80,9 +80,11 @@ async function load() {
   $("#activityRows").innerHTML = latestRows.map((a, index) => {
     const verified = a.parserConfidence >= 0.95;
     const canPreview = profile?.role === "admin" && verified;
-    const hasNewerVerified = latestRows.slice(0, index).some(x => x.parserConfidence >= 0.95);
-    const historicalFailed = a.postStatus === "failed" && hasNewerVerified;
-    const canTestPost = profile?.role === "admin" && verified && !historicalFailed && ["held", "failed"].includes(a.postStatus);
+    const hasNewerSameType = latestRows.slice(0, index).some(x => x.type === a.type && x.parserConfidence >= 0.95);
+    const historicalFailed = a.postStatus === "failed" && hasNewerSameType;
+    const latestVerifiedForType = verified && !hasNewerSameType;
+    const manualEligibleStatus = ["held", "failed", "pending"].includes(a.postStatus);
+    const canManualPost = profile?.role === "admin" && latestVerifiedForType && manualEligibleStatus;
 
     let facebookLabel = (a.postStatus || "not posted").toUpperCase();
     let facebookClass = a.postStatus === "posted" ? "ok" : a.postStatus === "failed" && !historicalFailed ? "fail" : "";
@@ -91,6 +93,15 @@ async function load() {
     if (!settings.autoPostEnabled && ["pending", "held"].includes(a.postStatus)) {
       facebookLabel = "WAITING · AUTO-POST OFF";
       facebookStyle = "color:#d7e1ea";
+    } else if (a.postStatus === "held" && settings.autoPostEnabled) {
+      facebookLabel = "WAITING · AUTO-POST ON";
+      facebookStyle = "color:#ffd980";
+    } else if (a.postStatus === "pending") {
+      facebookLabel = "PENDING · NEEDS CHECK";
+      facebookStyle = "color:#ffd980";
+    } else if (a.postStatus === "publishing") {
+      facebookLabel = "PUBLISHING…";
+      facebookStyle = "color:#8ed8ff";
     } else if (historicalFailed) {
       facebookLabel = "PREVIOUS FAILED ATTEMPT";
       facebookClass = "";
@@ -106,11 +117,16 @@ async function load() {
       }
     }
 
+    const reasonLine = a.holdReason && a.postStatus === "held"
+      ? `<br><span style="display:inline-block;margin-top:5px;color:#8fa1b4;font-size:11px;max-width:230px;line-height:1.35">${esc(a.holdReason)}</span>`
+      : "";
+
     const facebookCell = `
       <span class="${facebookClass}" style="${facebookStyle}">${esc(facebookLabel)}</span>
+      ${reasonLine}
       ${errorLine}
       ${canPreview ? `<br><button class="btn secondary preview-graphic" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">Preview graphic</button>` : ""}
-      ${canTestPost ? `<br><button class="btn secondary test-post" data-id="${esc(a.id)}" style="margin-top:6px;padding:7px 10px;font-size:12px">${a.postStatus === "failed" ? "Retry test" : "Publish test"}</button>` : ""}
+      ${canManualPost ? `<br><button class="btn secondary manual-post" data-id="${esc(a.id)}" style="margin-top:6px;padding:7px 10px;font-size:12px">Publish manually</button>` : ""}
     `;
 
     return `<tr>
@@ -151,14 +167,21 @@ $("#signIn").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).cat
 $("#signOut").onclick = () => signOut(auth);
 $("#refresh").onclick = load;
 
+async function runScannerNow({ quiet = false } = {}) {
+  const r = await httpsCallable(functions, "scanWeatherNow")({});
+  if (!quiet) {
+    alert(`Scan complete: ${r.data.detected} detected, ${r.data.posted} posted, ${r.data.held} held, ${r.data.duplicates || 0} duplicate.`);
+  }
+  await load();
+  return r.data;
+}
+
 $("#scanNow").onclick = async () => {
   const button = $("#scanNow");
   button.disabled = true;
   button.textContent = "Scanning…";
   try {
-    const r = await httpsCallable(functions, "scanWeatherNow")({});
-    alert(`Scan complete: ${r.data.detected} detected, ${r.data.posted} posted, ${r.data.held} held, ${r.data.duplicates || 0} duplicate.`);
-    await load();
+    await runScannerNow();
   } catch (e) {
     alert(callableErrorMessage(e));
   } finally {
@@ -200,18 +223,25 @@ $("#activityRows").addEventListener("click", async event => {
     return;
   }
 
-  const button = event.target.closest(".test-post");
+  const button = event.target.closest(".manual-post");
   if (!button || profile?.role !== "admin") return;
 
   const advisory = latestRows.find(a => a.id === button.dataset.id);
-  if (!advisory || advisory.parserConfidence < 0.95 || !["held", "failed"].includes(advisory.postStatus)) {
-    alert("This advisory is no longer eligible for a controlled test post.");
+  if (!advisory || advisory.parserConfidence < 0.95 || !["held", "failed", "pending"].includes(advisory.postStatus)) {
+    alert("This advisory is no longer eligible for manual publishing.");
+    await load();
+    return;
+  }
+
+  const newerSameType = latestRows.some(a => a.type === advisory.type && a.parserConfidence >= 0.95 && a.id !== advisory.id && latestRows.indexOf(a) < latestRows.indexOf(advisory));
+  if (newerSameType) {
+    alert("A newer verified advisory of this type already exists. Refresh the dashboard and publish the latest one instead.");
     await load();
     return;
   }
 
   const ok = confirm(
-    `Publish this VERIFIED advisory to the BYDRRM Facebook Page now?\n\n${advisory.title}\n${advisory.issuedAtText || ""}\n\nFacebook Full Auto will remain OFF.`
+    `Publish this VERIFIED advisory to the BYDRRM Facebook Page now?\n\n${advisory.title}\n${advisory.issuedAtText || ""}\n\nThis will publish immediately using the current graphic and caption.`
   );
   if (!ok) return;
 
@@ -219,24 +249,39 @@ $("#activityRows").addEventListener("click", async event => {
   button.textContent = "Publishing…";
   try {
     await httpsCallable(functions, "retryWeatherPost")({ id: advisory.id });
-    alert("Controlled Facebook test post published successfully. Full Auto remains OFF.");
+    alert("Facebook post published successfully.");
     await load();
   } catch (e) {
-    alert(`Facebook test post failed: ${callableErrorMessage(e)}`);
+    alert(`Facebook publish failed: ${callableErrorMessage(e)}`);
     await load();
   } finally {
     button.disabled = false;
-    button.textContent = "Retry test";
+    button.textContent = "Publish manually";
   }
 });
 
 $("#autoSwitch").onclick = async () => {
   if (profile?.role !== "admin") return;
-  const ref = doc(db, "weather_settings", "main");
-  const snap = await getDoc(ref);
-  const next = !(snap.exists() && snap.data().autoPostEnabled);
-  await setDoc(ref, { autoPostEnabled: next, updatedAt: serverTimestamp() }, { merge: true });
-  await load();
+  const button = $("#autoSwitch");
+  button.disabled = true;
+  try {
+    const ref = doc(db, "weather_settings", "main");
+    const snap = await getDoc(ref);
+    const next = !(snap.exists() && snap.data().autoPostEnabled);
+    await setDoc(ref, { autoPostEnabled: next, updatedAt: serverTimestamp() }, { merge: true });
+    await load();
+    if (next) {
+      try {
+        await runScannerNow({ quiet: true });
+      } catch (e) {
+        alert(`Full Auto is ON, but the immediate verification scan failed: ${callableErrorMessage(e)}`);
+      }
+    }
+  } catch (e) {
+    alert(`Could not change Full Auto: ${e.message || e}`);
+  } finally {
+    button.disabled = profile?.role !== "admin";
+  }
 };
 
 $("#pausePosting").onclick = async () => {
