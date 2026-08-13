@@ -40,6 +40,10 @@ function callableErrorMessage(error) {
   return error?.message || "Unknown error";
 }
 
+function isFacebookTokenExpired(message = "") {
+  return /error validating access token|session has expired|access token.*expired|expired.*access token|oauthexception.*190/i.test(String(message));
+}
+
 function postedToday(row, today) {
   if (row.postStatus !== "posted") return false;
   if (row.postedDateManila) return row.postedDateManila === today;
@@ -74,6 +78,11 @@ async function load() {
   latestRows = qs.docs.map(d => ({ id: d.id, ...d.data() }));
   $("#kpiAlerts").textContent = latestRows.filter(x => x.active !== false).length;
 
+  const currentTokenFailure = latestRows.find(x => x.active !== false && x.postStatus === "failed" && isFacebookTokenExpired(x.postError));
+  if (settings.autoPostEnabled && currentTokenFailure) {
+    $("#kpiAuto").textContent = "ON · TOKEN EXPIRED";
+  }
+
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   $("#kpiPosts").textContent = latestRows.filter(x => postedToday(x, today)).length;
 
@@ -82,15 +91,20 @@ async function load() {
     const canPreview = profile?.role === "admin" && verified;
     const hasNewerSameType = latestRows.slice(0, index).some(x => x.type === a.type && x.parserConfidence >= 0.95);
     const historicalFailed = a.postStatus === "failed" && hasNewerSameType;
+    const tokenExpired = a.postStatus === "failed" && isFacebookTokenExpired(a.postError);
     const latestVerifiedForType = verified && !hasNewerSameType;
     const manualEligibleStatus = ["held", "failed", "pending"].includes(a.postStatus);
-    const canManualPost = profile?.role === "admin" && latestVerifiedForType && manualEligibleStatus;
+    const canManualPost = profile?.role === "admin" && latestVerifiedForType && manualEligibleStatus && !tokenExpired;
 
     let facebookLabel = (a.postStatus || "not posted").toUpperCase();
     let facebookClass = a.postStatus === "posted" ? "ok" : a.postStatus === "failed" && !historicalFailed ? "fail" : "";
     let facebookStyle = "";
 
-    if (!settings.autoPostEnabled && ["pending", "held"].includes(a.postStatus)) {
+    if (tokenExpired && !historicalFailed) {
+      facebookLabel = "FACEBOOK TOKEN EXPIRED";
+      facebookClass = "fail";
+      facebookStyle = "color:#ff8e98";
+    } else if (!settings.autoPostEnabled && ["pending", "held"].includes(a.postStatus)) {
       facebookLabel = "WAITING · AUTO-POST OFF";
       facebookStyle = "color:#d7e1ea";
     } else if (a.postStatus === "held" && settings.autoPostEnabled) {
@@ -109,7 +123,9 @@ async function load() {
     }
 
     let errorLine = "";
-    if (a.postStatus === "failed" && a.postError) {
+    if (tokenExpired && !historicalFailed) {
+      errorLine = `<br><span style="display:inline-block;margin-top:7px;color:#ffb4ba;font-size:11px;max-width:230px;line-height:1.4">The stored Meta Page access token has expired. Renew the server-side token before publishing.</span><details style="margin-top:7px;max-width:230px;color:#8fa1b4;font-size:11px"><summary style="cursor:pointer;color:#9fb0bf">Technical details</summary><div style="margin-top:6px;line-height:1.35;overflow-wrap:anywhere">${esc(a.postError || "")}</div></details>`;
+    } else if (a.postStatus === "failed" && a.postError) {
       if (historicalFailed) {
         errorLine = `<details style="margin-top:7px;max-width:230px;color:#8fa1b4;font-size:11px"><summary style="cursor:pointer;color:#9fb0bf">View old error</summary><div style="margin-top:6px;line-height:1.35;overflow-wrap:anywhere">${esc(a.postError)}</div></details>`;
       } else {
@@ -127,6 +143,7 @@ async function load() {
       ${errorLine}
       ${canPreview ? `<br><button class="btn secondary preview-graphic" data-id="${esc(a.id)}" style="margin-top:8px;padding:7px 10px;font-size:12px">Preview graphic</button>` : ""}
       ${canManualPost ? `<br><button class="btn secondary manual-post" data-id="${esc(a.id)}" style="margin-top:6px;padding:7px 10px;font-size:12px">Publish manually</button>` : ""}
+      ${tokenExpired && latestVerifiedForType ? `<br><button class="btn secondary" disabled style="margin-top:6px;padding:7px 10px;font-size:12px;opacity:.6">Renew token first</button>` : ""}
     `;
 
     return `<tr>
@@ -230,6 +247,11 @@ $("#activityRows").addEventListener("click", async event => {
   if (!advisory || advisory.parserConfidence < 0.95 || !["held", "failed", "pending"].includes(advisory.postStatus)) {
     alert("This advisory is no longer eligible for manual publishing.");
     await load();
+    return;
+  }
+
+  if (isFacebookTokenExpired(advisory.postError)) {
+    alert("The Meta Page access token has expired. Renew the server-side token first, then refresh and publish the latest advisory.");
     return;
   }
 
