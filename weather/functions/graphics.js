@@ -94,16 +94,16 @@ function warningFill(a, name) {
 }
 
 const LABEL_SIZE = {
-  "Baliwag": 19, "Bustos": 19, "Pulilan": 19, "Plaridel": 19, "Pandi": 19,
-  "Guiguinto": 18, "Balagtas": 18, "Bocaue": 18, "Malolos": 19, "Paombong": 18,
-  "Hagonoy": 19, "Bulakan": 18, "Marilao": 18, "Meycauayan": 17, "Obando": 17,
-  "Santa Maria": 19, "Angat": 19, "Calumpit": 19, "San Jose del Monte": 19,
-  "Doña Remedios Trinidad": 21, "San Miguel": 21, "San Ildefonso": 20, "San Rafael": 20,
-  "Norzagaray": 20
+  "Baliwag": 20, "Bustos": 20, "Pulilan": 20, "Plaridel": 20, "Pandi": 20,
+  "Guiguinto": 19, "Balagtas": 19, "Bocaue": 19, "Malolos": 20, "Paombong": 19,
+  "Hagonoy": 20, "Bulakan": 19, "Marilao": 19, "Meycauayan": 18, "Obando": 18,
+  "Santa Maria": 20, "Angat": 20, "Calumpit": 20, "San Jose del Monte": 20,
+  "Doña Remedios Trinidad": 22, "San Miguel": 22, "San Ildefonso": 21, "San Rafael": 21,
+  "Norzagaray": 21
 };
 function labelSvg(name, x, y) {
-  const size = LABEL_SIZE[name] || (name.length > 15 ? 19 : 20);
-  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="${size}" font-weight="700" fill="#ffffff" stroke="#07111a" stroke-width="2" paint-order="stroke" stroke-linejoin="round" style="text-rendering:geometricPrecision">${esc(name)}</text>`;
+  const size = LABEL_SIZE[name] || (name.length > 15 ? 20 : 21);
+  return `<text x="${x}" y="${y}" text-anchor="middle" font-family="DejaVu Sans,Arial,sans-serif" font-size="${size}" font-weight="800" fill="#ffffff" stroke="#06111d" stroke-width="3.1" paint-order="stroke" stroke-linejoin="round" filter="url(#labelShadow)" style="text-rendering:geometricPrecision">${esc(name)}</text>`;
 }
 function mapSvg(a) {
   let shapes = "", labels = "";
@@ -167,12 +167,13 @@ function graphicSvg(a) {
   const sub = a.type === "heavy_rainfall" && a.warningNo ? `WARNING NO. ${esc(a.warningNo)}` : a.type === "rainfall_advisory" && a.advisoryNo ? `ADVISORY NO. ${esc(a.advisoryNo)}` : "OFFICIAL ADVISORY";
   const sys = systemLines(a.weatherSystem || "");
   const legend = rainfall ? rainfallLegend() : genericLegend(a);
-  return `<svg width="2160" height="2160" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
+  return `<svg width="3240" height="3240" viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
     <defs>
       <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#04111f"/><stop offset=".54" stop-color="#092039"/><stop offset="1" stop-color="#061626"/></linearGradient>
       <radialGradient id="glow" cx="18%" cy="47%" r="60%"><stop stop-color="#1b557c" stop-opacity=".18"/><stop offset="1" stop-color="#1b557c" stop-opacity="0"/></radialGradient>
       <pattern id="rain" width="38" height="38" patternUnits="userSpaceOnUse" patternTransform="rotate(17)"><line x1="0" y1="0" x2="0" y2="16" stroke="#d3e1ea" stroke-opacity=".03" stroke-width=".8"/></pattern>
       <filter id="titleShadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity=".34"/></filter>
+      <filter id="labelShadow" x="-35%" y="-45%" width="170%" height="190%"><feDropShadow dx="0" dy="1.4" stdDeviation="1.65" flood-color="#000000" flood-opacity=".82"/></filter>
     </defs>
     <rect width="1080" height="1080" fill="url(#bg)"/>
     <rect width="1080" height="1080" fill="url(#rain)"/>
