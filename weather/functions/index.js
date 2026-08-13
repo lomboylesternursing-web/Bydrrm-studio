@@ -187,25 +187,47 @@ async function fetchText(url) {
   return clean($("body").text().replace(/\r/g, "\n"));
 }
 
+function boldText(value = "") {
+  return [...String(value)].map(ch => {
+    const code = ch.codePointAt(0);
+    if (code >= 65 && code <= 90) return String.fromCodePoint(0x1D400 + code - 65);
+    if (code >= 97 && code <= 122) return String.fromCodePoint(0x1D41A + code - 97);
+    if (code >= 48 && code <= 57) return String.fromCodePoint(0x1D7CE + code - 48);
+    return ch;
+  }).join("");
+}
+
 function caption(a) {
   const where = (a.municipalities || []).join(", ");
-  let lead = `⚠️ ${a.title.toUpperCase()}\n\n`;
+  const row = (label, names) => `${boldText(label)}: ${names.join(", ")}`;
+  let lead = `⚠️ ${boldText(a.title.toUpperCase())}\n\n`;
+
   if (a.type === "heavy_rainfall") {
-    const rows = Object.entries(a.levels || {}).filter(([, v]) => v.length).map(([l, v]) => `${l}: ${v.join(", ")}`);
-    if (a.rainfallContext?.expecting?.length) rows.push(`EXPECTING: ${a.rainfallContext.expecting.join(", ")}`);
-    if (a.rainfallContext?.affecting?.length) rows.push(`AFFECTING: ${a.rainfallContext.affecting.join(", ")}`);
-    lead += `${rows.join("\n")}\n\n${a.weatherSystem ? `Weather System: ${a.weatherSystem}\n` : ""}`;
+    const rows = Object.entries(a.levels || {})
+      .filter(([, v]) => v.length)
+      .map(([level, names]) => row(level, names));
+    if (a.rainfallContext?.affecting?.length) rows.push(row("AFFECTING", a.rainfallContext.affecting));
+    if (a.rainfallContext?.expecting?.length) rows.push(row("EXPECTING", a.rainfallContext.expecting));
+    lead += `${rows.join("\n")}\n\n`;
   } else if (a.type === "rainfall_advisory") {
     const rows = [];
-    if (a.rainfallContext?.expecting?.length) rows.push(`EXPECTING: ${a.rainfallContext.expecting.join(", ")}`);
-    if (a.rainfallContext?.affecting?.length) rows.push(`AFFECTING: ${a.rainfallContext.affecting.join(", ")}`);
-    lead += `${rows.join("\n")}\n\n${a.weatherSystem ? `Weather System: ${a.weatherSystem}\n` : ""}`;
+    if (a.rainfallContext?.affecting?.length) rows.push(row("AFFECTING", a.rainfallContext.affecting));
+    if (a.rainfallContext?.expecting?.length) rows.push(row("EXPECTING", a.rainfallContext.expecting));
+    lead += `${rows.join("\n")}\n\n`;
   } else if (a.type === "tcws") {
-    lead += Object.entries(a.tcwsLevels || {}).map(([l, v]) => `TCWS #${l}: ${v.join(", ")}`).join("\n") + "\n\n";
+    lead += Object.entries(a.tcwsLevels || {})
+      .map(([level, names]) => row(`TCWS #${level}`, names))
+      .join("\n") + "\n\n";
   } else {
-    lead += `Affected areas in Bulacan: ${where}\n\n`;
+    lead += `${boldText("AFFECTED AREAS IN BULACAN")}: ${where}\n\n`;
   }
-  return `${lead}Issued: ${a.issuedAtText || "See official bulletin"}\n\nResidents are advised to monitor official updates and follow instructions from local authorities.\n\nSource: ${a.sourceName}\n#BYDRRM #WeatherAdvisory #Bulacan`;
+
+  if (a.weatherSystem) lead += `${boldText("Weather System")}: ${a.weatherSystem}\n`;
+  lead += `${boldText("Issued")}: ${a.issuedAtText || "See official bulletin"}\n\n`;
+  lead += `Residents are advised to monitor official updates and follow instructions from local authorities.\n\n`;
+  lead += `${boldText("Source")}: ${a.sourceName}\n`;
+  lead += `#BYDRRM #WeatherAdvisory #Bulacan`;
+  return lead;
 }
 
 async function renderPng(a) {
