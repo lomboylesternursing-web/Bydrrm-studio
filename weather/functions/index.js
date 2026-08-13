@@ -272,30 +272,67 @@ async function settings() {
   return s.exists ? s.data() : { autoPostEnabled: false };
 }
 
+async function publishAndRecord(ref, a) {
+  const attemptAt = admin.firestore.FieldValue.serverTimestamp();
+  await ref.update({
+    postStatus: "publishing",
+    lastPostAttemptAt: attemptAt,
+    holdReason: admin.firestore.FieldValue.delete()
+  });
+  try {
+    const fb = await postFacebook(a);
+    const manila = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    await ref.update({
+      postStatus: "posted",
+      facebookPhotoId: fb.id || null,
+      facebookPostId: fb.post_id || null,
+      postedAt: admin.firestore.FieldValue.serverTimestamp(),
+      postedDateManila: manila,
+      postError: admin.firestore.FieldValue.delete()
+    });
+    return { state: "posted" };
+  } catch (e) {
+    const message = safePostError(e);
+    await ref.update({
+      postStatus: "failed",
+      postError: message,
+      lastPostAttemptAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    return { state: "failed", error: message };
+  }
+}
+
 async function upsertAndMaybePost(a, opts = { post: true }) {
   const ref = db.collection("weather_advisories").doc(a.key);
   const old = await ref.get();
-  if (old.exists) return { state: "duplicate" };
+  const cfg = await settings();
+
+  if (old.exists) {
+    const previous = old.data();
+    const recoverableHeld = previous.parserConfidence >= 0.95
+      && opts.post
+      && cfg.autoPostEnabled === true
+      && previous.postStatus === "held"
+      && previous.holdReason === "Auto-post paused";
+
+    if (recoverableHeld) {
+      await ref.set({ ...a, recoveredForAutoPostAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      return publishAndRecord(ref, { ...previous, ...a });
+    }
+    return { state: "duplicate" };
+  }
+
   const now = admin.firestore.FieldValue.serverTimestamp();
   await ref.set({ ...a, createdAt: now, postStatus: "pending" });
   if (a.parserConfidence < 0.95) {
     await ref.update({ postStatus: "held", holdReason: "Parser confidence below auto-post threshold" });
     return { state: "held" };
   }
-  const cfg = await settings();
   if (!opts.post || cfg.autoPostEnabled === false) {
     await ref.update({ postStatus: "held", holdReason: cfg.autoPostEnabled === false ? "Auto-post paused" : "Posting disabled for this scan" });
     return { state: "held" };
   }
-  try {
-    const fb = await postFacebook(a);
-    const manila = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-    await ref.update({ postStatus: "posted", facebookPhotoId: fb.id || null, facebookPostId: fb.post_id || null, postedAt: now, postedDateManila: manila });
-    return { state: "posted" };
-  } catch (e) {
-    await ref.update({ postStatus: "failed", postError: String(e.message || e).slice(0, 500), lastPostAttemptAt: now });
-    return { state: "failed", error: e.message };
-  }
+  return publishAndRecord(ref, a);
 }
 
 async function runScan() {
@@ -371,7 +408,7 @@ exports.retryWeatherPost = onCall({ region: "asia-southeast1", secrets: [META_PA
     const fb = await postFacebook(a);
     const now = admin.firestore.FieldValue.serverTimestamp();
     const manila = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-    await ref.update({ postStatus: "posted", facebookPhotoId: fb.id || null, facebookPostId: fb.post_id || null, postedAt: now, postedDateManila: manila, postError: admin.firestore.FieldValue.delete() });
+    await ref.update({ postStatus: "posted", facebookPhotoId: fb.id || null, facebookPostId: fb.post_id || null, postedAt: now, postedDateManila: manila, postError: admin.firestore.FieldValue.delete(), holdReason: admin.firestore.FieldValue.delete() });
     return { ok: true, ...fb };
   } catch (e) {
     const message = safePostError(e);
