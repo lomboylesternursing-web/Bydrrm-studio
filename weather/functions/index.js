@@ -200,31 +200,47 @@ function boldText(value = "") {
 function caption(a) {
   const where = (a.municipalities || []).join(", ");
   const row = (label, names) => `${boldText(label)}: ${names.join(", ")}`;
+  const hasWarningLevel = ["RED", "ORANGE", "YELLOW"].some(level => (a.levels?.[level] || []).length);
   let lead = `⚠️ ${boldText(a.title.toUpperCase())}\n\n`;
 
   if (a.type === "heavy_rainfall") {
+    lead += `Mga Bulakenyo, narito ang pinakahuling rainfall update mula sa PAGASA. Tingnan ang mapa at listahan para malaman ang kalagayan sa inyong lugar.\n\n`;
     const rows = Object.entries(a.levels || {})
       .filter(([, v]) => v.length)
       .map(([level, names]) => row(level, names));
     if (a.rainfallContext?.affecting?.length) rows.push(row("AFFECTING", a.rainfallContext.affecting));
     if (a.rainfallContext?.expecting?.length) rows.push(row("EXPECTING", a.rainfallContext.expecting));
-    lead += `${rows.join("\n")}\n\n`;
+    lead += `${boldText("KALAGAYAN SA BULACAN")}\n${rows.join("\n")}\n\n`;
+    if (a.rainfallContext?.affecting?.length) lead += `🌧️ Ang mga lugar na nasa ${boldText("AFFECTING")} ay kasalukuyang nakararanas ng pag-ulan.\n`;
+    if (a.rainfallContext?.expecting?.length) lead += `☔ Ang mga lugar na nasa ${boldText("EXPECTING")} ay inaasahang makaranas ng pag-ulan.\n`;
+    if (hasWarningLevel) lead += `⚠️ Kung ang inyong lugar ay nasa Yellow, Orange o Red Warning, manatiling alerto at bantayan ang kondisyon sa inyong lugar, lalo na sa mabababa at flood-prone na bahagi.\n`;
+    lead += `\n`;
   } else if (a.type === "rainfall_advisory") {
+    lead += `Mga Bulakenyo, may rainfall advisory para sa ilang bahagi ng lalawigan. Narito ang madaling basahing update para makita agad kung ano ang kalagayan sa inyong lugar.\n\n`;
     const rows = [];
     if (a.rainfallContext?.affecting?.length) rows.push(row("AFFECTING", a.rainfallContext.affecting));
     if (a.rainfallContext?.expecting?.length) rows.push(row("EXPECTING", a.rainfallContext.expecting));
-    lead += `${rows.join("\n")}\n\n`;
+    lead += `${boldText("KALAGAYAN SA BULACAN")}\n${rows.join("\n")}\n\n`;
+    if (a.rainfallContext?.affecting?.length) lead += `🌧️ ${boldText("AFFECTING")} — kasalukuyang nakararanas ng pag-ulan ang mga nakalistang lugar.\n`;
+    if (a.rainfallContext?.expecting?.length) lead += `☔ ${boldText("EXPECTING")} — inaasahang makaranas ng pag-ulan ang mga nakalistang lugar.\n`;
+    lead += `\n`;
   } else if (a.type === "tcws") {
+    lead += `Mga Bulakenyo, may Tropical Cyclone Wind Signal na nakataas sa mga sumusunod na lugar ayon sa PAGASA.\n\n`;
     lead += Object.entries(a.tcwsLevels || {})
       .map(([level, names]) => row(`TCWS #${level}`, names))
       .join("\n") + "\n\n";
+    lead += `🌀 Ang signal number sa itaas ay mula sa official PAGASA bulletin. Ihanda ang tahanan at manatiling nakatutok sa susunod na abiso.\n\n`;
+  } else if (a.type === "thunderstorm") {
+    lead += `Mga Bulakenyo, may Thunderstorm Advisory para sa mga sumusunod na lugar:\n\n`;
+    lead += `${boldText("AFFECTED AREAS IN BULACAN")}: ${where}\n\n`;
+    lead += `⛈️ Mag-ingat sa pagkulog, pagkidlat at biglaang pag-ulan. Kung nasa labas, humanap ng ligtas na masisilungan at iwasan ang mga bukas na lugar.\n\n`;
   } else {
     lead += `${boldText("AFFECTED AREAS IN BULACAN")}: ${where}\n\n`;
   }
 
   if (a.weatherSystem) lead += `${boldText("Weather System")}: ${a.weatherSystem}\n`;
   lead += `${boldText("Issued")}: ${a.issuedAtText || "See official bulletin"}\n\n`;
-  lead += `Residents are advised to monitor official updates and follow instructions from local authorities.\n\n`;
+  lead += `${boldText("PAALALA")}: Iwasang tumawid sa baha o rumaragasang tubig. Manatiling nakatutok sa mga susunod na abiso ng PAGASA at ng inyong LGU.\n\n`;
   lead += `${boldText("Source")}: ${a.sourceName}\n`;
   lead += `#BYDRRM #WeatherAdvisory #Bulacan`;
   return lead;
