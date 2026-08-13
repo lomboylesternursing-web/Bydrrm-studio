@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#071225" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>BYDRRM Weather</title>
+  <link rel="icon" href="../favicon-48.png" />
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="authGate" class="auth-gate">
+    <section class="auth-card">
+      <img class="auth-logo" src="../icon-192.png" alt="BYDRRM" />
+      <div class="auth-title">BYDRRM <span>WEATHER</span></div>
+      <h1 id="authHeading">Authorized Personnel Access</h1>
+      <p id="authMessage">Sign in using an approved BYDRRM Google account. New accounts remain pending until approved by the administrator.</p>
+      <button id="googleSignIn" class="btn primary wide">Continue with Google</button>
+      <button id="authSignOut" class="btn secondary wide hidden">Sign out</button>
+      <div id="authMeta" class="auth-meta">Connecting to BYDRRM Studio…</div>
+    </section>
+  </div>
+
+  <div class="app-shell">
+    <header class="app-header">
+      <img class="brand-logo" src="../icon-192.png" alt="BYDRRM" />
+      <div class="brand-copy">
+        <div class="brand-title">BYDRRM <span>WEATHER</span></div>
+        <div class="brand-sub">Bulacan Youth Disaster Risk Reduction and Management</div>
+      </div>
+      <div class="mode-pill"><span class="mode-dot"></span>MANUAL</div>
+    </header>
+
+    <main>
+      <section id="viewDashboard" class="view active" data-view="dashboard">
+        <article class="hero-card">
+          <div class="eyebrow">WEATHER ADVISORY STUDIO · V0.1</div>
+          <h1>Review first.<br><span>Post only when ready.</span></h1>
+          <p>Create a BYDRRM weather advisory, generate the graphic and caption, review it, then manually hand it off for posting. No scheduled or automatic publishing is enabled.</p>
+          <div class="hero-actions">
+            <button class="btn primary" data-open-studio>Create Advisory</button>
+            <button class="btn secondary" data-nav="history">View History</button>
+          </div>
+        </article>
+
+        <section class="stats-grid">
+          <article class="stat-card">
+            <span>Drafts</span><strong id="draftCount">0</strong><small>Needs review</small>
+          </article>
+          <article class="stat-card">
+            <span>Ready</span><strong id="readyCount">0</strong><small>Cleared for posting</small>
+          </article>
+          <article class="stat-card">
+            <span>Published</span><strong id="publishedCount">0</strong><small>Manually confirmed</small>
+          </article>
+        </section>
+
+        <article class="panel manual-panel">
+          <div>
+            <div class="panel-kicker">PUBLISHING MODE</div>
+            <h2>Manual Post Now</h2>
+            <p>The Post Now button opens your device share flow. If file sharing is not supported, the app downloads the PNG and copies the caption so the volunteer can upload them to Facebook manually.</p>
+          </div>
+          <div class="shield">✓</div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-kicker">STATUS</div>
+              <h2>Data connections</h2>
+            </div>
+            <span class="badge neutral">V0.1</span>
+          </div>
+          <div class="connection-list">
+            <div class="connection-row"><span>Advisory Studio</span><strong class="ok">Ready</strong></div>
+            <div class="connection-row"><span>Graphic Generator</span><strong class="ok">Ready</strong></div>
+            <div class="connection-row"><span>PAGASA live feed</span><strong class="muted">Next phase</strong></div>
+            <div class="connection-row"><span>Scheduled auto-posting</span><strong class="off">Disabled</strong></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-kicker">RECENT</div>
+              <h2>Latest advisories</h2>
+            </div>
+            <button class="text-btn" data-nav="history">See all</button>
+          </div>
+          <div id="recentList" class="history-list compact"></div>
+        </article>
+      </section>
+
+      <section id="viewStudio" class="view" data-view="studio">
+        <div class="section-head">
+          <button class="icon-back" data-nav="dashboard" aria-label="Back">←</button>
+          <div>
+            <div class="panel-kicker">ADVISORY STUDIO</div>
+            <h1 id="studioTitle">Create Advisory</h1>
+          </div>
+          <span id="editorStatus" class="badge draft">Draft</span>
+        </div>
+
+        <div class="studio-layout">
+          <section class="studio-form">
+            <article class="panel">
+              <div class="panel-head">
+                <div><div class="step">01</div><h2>Advisory details</h2></div>
+                <button id="newAdvisoryBtn" class="text-btn">New</button>
+              </div>
+              <div class="form-grid">
+                <label class="field full"><span>Advisory type</span>
+                  <select id="advisoryType">
+                    <option>Heavy Rainfall Warning</option>
+                    <option>Thunderstorm Advisory</option>
+                    <option>Weather Advisory</option>
+                    <option>Tropical Cyclone / TCWS</option>
+                    <option>Rainfall Update</option>
+                    <option>Flood / River Advisory</option>
+                  </select>
+                </label>
+                <label class="field"><span>Warning level</span>
+                  <select id="warningLevel">
+                    <option value="yellow">Yellow</option>
+                    <option value="orange">Orange</option>
+                    <option value="red">Red</option>
+                    <option value="blue">General / Blue</option>
+                  </select>
+                </label>
+                <label class="field"><span>Source</span>
+                  <input id="source" value="DOST-PAGASA" autocomplete="off" />
+                </label>
+                <label class="field full"><span>Headline</span>
+                  <input id="headline" placeholder="e.g. Heavy rains expected over parts of Bulacan" maxlength="120" />
+                </label>
+                <label class="field"><span>Issued / As of</span>
+                  <input id="issuedAt" type="datetime-local" />
+                </label>
+                <label class="field"><span>Valid until</span>
+                  <input id="validUntil" type="datetime-local" />
+                </label>
+                <label class="field full"><span>Situation / details</span>
+                  <textarea id="details" rows="5" placeholder="Summarize the official advisory. Keep the wording factual and concise."></textarea>
+                </label>
+                <label class="field full"><span>Recommended action</span>
+                  <textarea id="actionText" rows="4" placeholder="e.g. Monitor updates and avoid flooded roads. Residents near waterways should remain alert."></textarea>
+                </label>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div><div class="step">02</div><h2>Affected areas</h2></div>
+                <div class="mini-actions">
+                  <button id="selectAllLgus" class="text-btn">All Bulacan</button>
+                  <button id="clearLgus" class="text-btn">Clear</button>
+                </div>
+              </div>
+              <div id="lguGrid" class="lgu-grid"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <div><div class="step">03</div><h2>Caption</h2></div>
+                <button id="regenerateCaption" class="text-btn">Regenerate</button>
+              </div>
+              <textarea id="caption" class="caption-box" rows="13"></textarea>
+              <div class="button-grid two">
+                <button id="copyCaption" class="btn secondary">Copy Caption</button>
+                <button id="downloadPng" class="btn secondary">Download PNG</button>
+              </div>
+            </article>
+          </section>
+
+          <aside class="preview-column">
+            <article class="panel preview-panel">
+              <div class="panel-head">
+                <div><div class="panel-kicker">LIVE PREVIEW</div><h2>1080 × 1350</h2></div>
+                <span class="badge neutral">PNG</span>
+              </div>
+              <div class="canvas-wrap"><canvas id="posterCanvas" width="1080" height="1350"></canvas></div>
+            </article>
+
+            <article class="panel sticky-actions">
+              <div class="review-note">
+                <strong>Before posting</strong>
+                <span>Verify the source, timestamp, warning level, affected areas and wording against the official advisory.</span>
+              </div>
+              <button id="saveDraft" class="btn secondary wide">Save Draft</button>
+              <button id="markReady" class="btn ready wide">Mark Ready</button>
+              <button id="postNow" class="btn post wide">Post Now</button>
+              <small class="post-note">Post Now is a manual handoff. Nothing is scheduled or published automatically.</small>
+            </article>
+          </aside>
+        </div>
+      </section>
+
+      <section id="viewHistory" class="view" data-view="history">
+        <div class="section-head">
+          <button class="icon-back" data-nav="dashboard" aria-label="Back">←</button>
+          <div>
+            <div class="panel-kicker">ADVISORY LOG</div>
+            <h1>History</h1>
+          </div>
+          <button class="btn primary small" data-open-studio>+ New</button>
+        </div>
+        <article class="panel">
+          <div class="history-filters">
+            <button class="filter active" data-filter="all">All</button>
+            <button class="filter" data-filter="Draft">Draft</button>
+            <button class="filter" data-filter="Ready">Ready</button>
+            <button class="filter" data-filter="Published">Published</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <nav class="bottom-nav" aria-label="Primary navigation">
+      <button class="nav-item active" data-nav="dashboard"><span>⌂</span><small>Home</small></button>
+      <button class="nav-item" data-nav="studio"><span>＋</span><small>Studio</small></button>
+      <button class="nav-item" data-nav="history"><span>☷</span><small>History</small></button>
+    </nav>
+  </div>
+
+  <div id="postModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="postModalTitle">
+    <div class="modal-card">
+      <div class="modal-icon">↗</div>
+      <h2 id="postModalTitle">Post this advisory now?</h2>
+      <p>This is a <strong>manual</strong> posting action. The app will open your device share flow. Choose Facebook and the correct BYDRRM Page. No scheduled or background posting will occur.</p>
+      <div class="modal-checks">
+        <label><input id="verifySource" type="checkbox" /> Source and details verified</label>
+        <label><input id="verifyGraphic" type="checkbox" /> Graphic and caption reviewed</label>
+      </div>
+      <div class="button-grid two">
+        <button id="cancelPost" class="btn secondary">Cancel</button>
+        <button id="confirmPost" class="btn post" disabled>Continue to Share</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
