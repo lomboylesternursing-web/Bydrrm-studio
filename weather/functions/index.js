@@ -14,6 +14,8 @@ const META_PAGE_ID = defineSecret("META_PAGE_ID");
 
 const NCR_URL = "https://www.pagasa.dost.gov.ph/regional-forecast/ncrprsd";
 const TC_URL = "https://www.pagasa.dost.gov.ph/tropical-cyclone/severe-weather-bulletin";
+const META_UPLOAD_TIMEOUT_MS = 90000;
+const STALE_PUBLISHING_MS = 2 * 60 * 1000;
 const BULACAN = [
   "Angat", "Balagtas", "Baliwag", "Bocaue", "Bulakan", "Bustos", "Calumpit",
   "Doña Remedios Trinidad", "Guiguinto", "Hagonoy", "Malolos", "Marilao",
@@ -260,7 +262,10 @@ async function postFacebook(a) {
   form.append("published", "true");
   form.append("source", new Blob([png], { type: "image/png" }), `bydrrm-${a.key}.png`);
   const r = await fetch(`https://graph.facebook.com/v25.0/${encodeURIComponent(page)}/photos`, {
-    method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+    signal: AbortSignal.timeout(META_UPLOAD_TIMEOUT_MS)
   });
   const data = await r.json();
   if (!r.ok || data.error) throw new Error(data.error?.message || `Meta HTTP ${r.status}`);
@@ -270,6 +275,24 @@ async function postFacebook(a) {
 async function settings() {
   const s = await db.doc("weather_settings/main").get();
   return s.exists ? s.data() : { autoPostEnabled: false };
+}
+
+function timestampMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.toDate === "function") return value.toDate().getTime();
+  if (typeof value._seconds === "number") return value._seconds * 1000;
+  return 0;
+}
+
+function stalePublishing(previous) {
+  if (previous?.postStatus !== "publishing") return false;
+  const started = timestampMillis(previous.lastPostAttemptAt);
+  return started > 0 && Date.now() - started > STALE_PUBLISHING_MS;
+}
+
+function safePostError(e) {
+  return String(e?.message || e || "Unknown Facebook publishing error").replace(/access_token=[^&\s]+/gi, "access_token=[redacted]").slice(0, 500);
 }
 
 async function publishAndRecord(ref, a) {
@@ -288,14 +311,20 @@ async function publishAndRecord(ref, a) {
       facebookPostId: fb.post_id || null,
       postedAt: admin.firestore.FieldValue.serverTimestamp(),
       postedDateManila: manila,
-      postError: admin.firestore.FieldValue.delete()
+      postError: admin.firestore.FieldValue.delete(),
+      holdReason: admin.firestore.FieldValue.delete()
     });
-    return { state: "posted" };
+    return { state: "posted", fb };
   } catch (e) {
-    const message = safePostError(e);
+    const rawMessage = safePostError(e);
+    const timeoutLike = e?.name === "TimeoutError" || e?.name === "AbortError" || /timeout|timed out|aborted/i.test(rawMessage);
+    const message = timeoutLike
+      ? `Facebook publishing timed out before confirmation. Verify the BYDRRM Page before retrying manually. ${rawMessage}`.slice(0, 500)
+      : rawMessage;
     await ref.update({
       postStatus: "failed",
       postError: message,
+      holdReason: timeoutLike ? "Verify Facebook before retrying; previous publish result was not confirmed." : admin.firestore.FieldValue.delete(),
       lastPostAttemptAt: admin.firestore.FieldValue.serverTimestamp()
     });
     return { state: "failed", error: message };
@@ -309,6 +338,18 @@ async function upsertAndMaybePost(a, opts = { post: true }) {
 
   if (old.exists) {
     const previous = old.data();
+
+    if (stalePublishing(previous)) {
+      const message = "Previous Facebook publishing attempt did not complete. Verify the BYDRRM Page before retrying manually.";
+      await ref.update({
+        postStatus: "failed",
+        postError: message,
+        holdReason: "Verify Facebook before retrying; the previous publish result is unknown.",
+        stalePublishingRecoveredAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { state: "failed", error: message };
+    }
+
     const recoverableHeld = previous.parserConfidence >= 0.95
       && opts.post
       && cfg.autoPostEnabled === true
@@ -365,21 +406,28 @@ async function requireApproved(req, adminOnly = false) {
   if (adminOnly && p.data().role !== "admin") throw new HttpsError("permission-denied", "Administrator access required.");
   return p.data();
 }
-function safePostError(e) {
-  return String(e?.message || e || "Unknown Facebook publishing error").replace(/access_token=[^&\s]+/gi, "access_token=[redacted]").slice(0, 500);
-}
 
 exports.scanWeatherAdvisories = onSchedule({
-  schedule: "every 5 minutes", timeZone: "Asia/Manila", region: "asia-southeast1",
-  secrets: [META_PAGE_ACCESS_TOKEN, META_PAGE_ID], retryCount: 1
+  schedule: "every 5 minutes",
+  timeZone: "Asia/Manila",
+  region: "asia-southeast1",
+  secrets: [META_PAGE_ACCESS_TOKEN, META_PAGE_ID],
+  retryCount: 1,
+  timeoutSeconds: 180,
+  memory: "1GiB"
 }, runScan);
 
-exports.scanWeatherNow = onCall({ region: "asia-southeast1", secrets: [META_PAGE_ACCESS_TOKEN, META_PAGE_ID] }, async req => {
+exports.scanWeatherNow = onCall({
+  region: "asia-southeast1",
+  secrets: [META_PAGE_ACCESS_TOKEN, META_PAGE_ID],
+  timeoutSeconds: 180,
+  memory: "1GiB"
+}, async req => {
   await requireApproved(req, false);
   return runScan();
 });
 
-exports.previewWeatherGraphic = onCall({ region: "asia-southeast1", memory: "512MiB" }, async req => {
+exports.previewWeatherGraphic = onCall({ region: "asia-southeast1", memory: "512MiB", timeoutSeconds: 120 }, async req => {
   await requireApproved(req, true);
   const id = String(req.data?.id || "");
   if (!id) throw new HttpsError("invalid-argument", "Missing advisory id.");
@@ -395,7 +443,12 @@ exports.previewWeatherGraphic = onCall({ region: "asia-southeast1", memory: "512
   }
 });
 
-exports.retryWeatherPost = onCall({ region: "asia-southeast1", secrets: [META_PAGE_ACCESS_TOKEN, META_PAGE_ID] }, async req => {
+exports.retryWeatherPost = onCall({
+  region: "asia-southeast1",
+  secrets: [META_PAGE_ACCESS_TOKEN, META_PAGE_ID],
+  timeoutSeconds: 180,
+  memory: "1GiB"
+}, async req => {
   await requireApproved(req, true);
   const id = String(req.data?.id || "");
   if (!id) throw new HttpsError("invalid-argument", "Missing advisory id.");
@@ -404,17 +457,12 @@ exports.retryWeatherPost = onCall({ region: "asia-southeast1", secrets: [META_PA
   if (!snap.exists) throw new HttpsError("not-found", "Advisory not found.");
   const a = snap.data();
   if (a.parserConfidence < 0.95) throw new HttpsError("failed-precondition", "Held advisory cannot be published automatically.");
-  try {
-    const fb = await postFacebook(a);
-    const now = admin.firestore.FieldValue.serverTimestamp();
-    const manila = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-    await ref.update({ postStatus: "posted", facebookPhotoId: fb.id || null, facebookPostId: fb.post_id || null, postedAt: now, postedDateManila: manila, postError: admin.firestore.FieldValue.delete(), holdReason: admin.firestore.FieldValue.delete() });
-    return { ok: true, ...fb };
-  } catch (e) {
-    const message = safePostError(e);
-    await ref.update({ postStatus: "failed", postError: message, lastPostAttemptAt: admin.firestore.FieldValue.serverTimestamp() });
-    throw new HttpsError("internal", message, { message });
+
+  const result = await publishAndRecord(ref, a);
+  if (result.state !== "posted") {
+    throw new HttpsError("internal", result.error || "Facebook publishing failed.", { message: result.error || "Facebook publishing failed." });
   }
+  return { ok: true, ...(result.fb || {}) };
 });
 
-exports._test = { parseHeavy, parseRainfallAdvisory, parseThunder, parseTCWS, rainfallContextFromBlock, caption };
+exports._test = { parseHeavy, parseRainfallAdvisory, parseThunder, parseTCWS, rainfallContextFromBlock, caption, stalePublishing };
