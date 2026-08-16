@@ -1,0 +1,38 @@
+name: BYDRRM Weather CI
+
+on:
+  pull_request:
+    paths:
+      - "weather/**"
+      - ".github/workflows/bydrrm-weather-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parser-test:
+    name: Validate weather parser
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: weather/functions
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: weather/functions/package.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run PAGASA parser tests
+        run: npm test

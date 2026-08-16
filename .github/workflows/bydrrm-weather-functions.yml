@@ -1,0 +1,67 @@
+name: BYDRRM Weather Functions
+
+on:
+  push:
+    branches:
+      - agent/bydrrm-weather-v1
+    paths:
+      - "weather/functions/**"
+      - "weather/radar-functions/**"
+      - "weather/public/assets/bydrrm-logo.png"
+      - "weather/firebase.json"
+      - ".github/workflows/bydrrm-weather-functions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-functions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_PROJECT_ID: bydrrm-studio
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Stage official BYDRRM logo
+        run: |
+          mkdir -p weather/functions/assets
+          cp weather/public/assets/bydrrm-logo.png weather/functions/assets/bydrrm-logo.png
+          node <<'NODE'
+          const fs = require('fs');
+          const logo = fs.readFileSync('weather/public/assets/bydrrm-logo.png').toString('base64');
+          fs.writeFileSync('weather/functions/logoData.js', `"use strict";\nmodule.exports = ${JSON.stringify(logo)};\n`);
+          NODE
+          test -s weather/functions/assets/bydrrm-logo.png
+          test -s weather/functions/logoData.js
+      - name: Install advisory function dependencies
+        working-directory: weather/functions
+        run: npm install
+      - name: Install radar proxy dependencies
+        working-directory: weather/radar-functions
+        run: npm install
+      - name: Validate radar proxy source
+        working-directory: weather/radar-functions
+        run: node --check index.js
+      - name: Build high-resolution Bulacan map
+        working-directory: weather/functions
+        run: |
+          node buildHighResMap.js
+          test -s mapData.js
+      - name: Run parser tests
+        working-directory: weather/functions
+        run: npm test
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+      - name: Authenticate
+        shell: bash
+        run: |
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+      - name: Deploy Weather functions only
+        working-directory: weather
+        run: firebase deploy --only functions --project "$FIREBASE_PROJECT_ID" --non-interactive

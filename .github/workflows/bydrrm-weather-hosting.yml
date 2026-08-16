@@ -1,0 +1,151 @@
+name: BYDRRM Weather Hosting
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "weather/public/**"
+      - "weather/firebase.json"
+      - "weather/.firebaserc.example"
+      - ".github/workflows/bydrrm-weather-hosting.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bydrrm-weather-hosting
+  cancel-in-progress: false
+
+jobs:
+  deploy-hosting:
+    name: Deploy isolated Weather site
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      FIREBASE_PROJECT_ID: bydrrm-studio
+      WEATHER_SITE_ID: bydrrm-weather
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify Firebase credential is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT:-}" ]; then
+            echo "::error::Missing repository secret FIREBASE_SERVICE_ACCOUNT. No Firebase changes were made."
+            exit 1
+          fi
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Authenticate Firebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Patch radar layer availability UX
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('weather/public/radar-live.html')
+          s=p.read_text()
+          s=s.replace('.layer:disabled{opacity:.38}', '.layer:disabled{opacity:.38}.layer.unavailable{opacity:.55;border-style:dashed}.layer.unavailable small:after{content:" · source unavailable";color:#d99a5c}')
+          s=s.replace('Radar Mosaic<small>Decoded reflectivity</small>', 'Radar Reflectivity<small>Doppler-derived dBZ when published</small>')
+          s=s.replace('Rain Rate<small>Decoded QPE</small>', 'Rain Rate<small>PAGASA radar QPE</small>')
+          s=s.replace("let w=0,h=0,dpr=1,zoom=7,center={...VIEW_PRESETS.regional.center},viewMode='regional',active='ir',reflectivityFrames=[],rainFrames=[],irFrames=[],idx=0,timer=null,drag=null,radarHealthy=false,irProduct='gk2a',municipal=null,renderToken=0,noticeTimer=null;", "let w=0,h=0,dpr=1,zoom=7,center={...VIEW_PRESETS.regional.center},viewMode='regional',active='ir',reflectivityFrames=[],rainFrames=[],irFrames=[],idx=0,timer=null,drag=null,reflectivityHealthy=false,rainHealthy=false,radarHealthy=false,irProduct='gk2a',municipal=null,renderToken=0,noticeTimer=null;")
+          s=s.replace("function activeArray(){if(active==='ir')return irFrames;if(active==='rain')return rainFrames;if(active==='radar')return reflectivityFrames;return reflectivityFrames}", "function activeArray(){if(active==='ir')return irFrames;if(active==='rain')return rainFrames;if(active==='radar')return reflectivityFrames;return reflectivityHealthy?reflectivityFrames:rainHealthy?rainFrames:irFrames}")
+          s=s.replace("function setDisabled(){document.querySelectorAll('.layer').forEach(b=>{if(['radar','rain','combined'].includes(b.dataset.layer))b.disabled=!radarHealthy})}", "function setAvailability(){document.querySelectorAll('.layer').forEach(b=>{let ok=true;if(b.dataset.layer==='radar')ok=reflectivityHealthy;if(b.dataset.layer==='rain')ok=rainHealthy;if(b.dataset.layer==='combined')ok=reflectivityHealthy||rainHealthy;b.disabled=false;b.classList.toggle('unavailable',!ok);b.setAttribute('aria-disabled',String(!ok))})}")
+          old="async function render(){if(!w||!h)return;const token=++renderToken;await drawTiles(token);if(token!==renderToken)return;let ok=false;if(active==='ir'){const f=irFrames[idx]||irFrames.at(-1);ok=await drawEnhanced(f?.url,IR_BOUNDS,'ir',.96,token)}else if(active==='combined'){const ir=irFrames[Math.min(idx,Math.max(0,irFrames.length-1))]||irFrames.at(-1),rr=reflectivityFrames[Math.min(idx,Math.max(0,reflectivityFrames.length-1))]||reflectivityFrames.at(-1);const a=await drawEnhanced(ir?.url,IR_BOUNDS,'ir',.72,token),b=radarHealthy?await drawEnhanced(rr?.url,RADAR_BOUNDS,'radar',1,token):false;ok=a||b}else{const arr=active==='rain'?rainFrames:reflectivityFrames,f=arr[idx]||arr.at(-1);ok=radarHealthy?await drawEnhanced(f?.url,RADAR_BOUNDS,'radar',1,token):false}if(token!==renderToken)return;drawBulacanGuide();updateLabels();if(!ok)showNotice('Weather layer is refreshing. BYDRRM basemap remains active.',2600)}"
+          new="async function render(){if(!w||!h)return;const token=++renderToken;await drawTiles(token);if(token!==renderToken)return;let ok=false;if(active==='ir'){const f=irFrames[idx]||irFrames.at(-1);ok=await drawEnhanced(f?.url,IR_BOUNDS,'ir',.96,token)}else if(active==='combined'){const ir=irFrames[Math.min(idx,Math.max(0,irFrames.length-1))]||irFrames.at(-1),arr=reflectivityHealthy?reflectivityFrames:rainHealthy?rainFrames:[],rr=arr[Math.min(idx,Math.max(0,arr.length-1))]||arr.at(-1);const a=await drawEnhanced(ir?.url,IR_BOUNDS,'ir',.70,token),b=(reflectivityHealthy||rainHealthy)?await drawEnhanced(rr?.url,RADAR_BOUNDS,'radar',1,token):false;ok=a||b}else if(active==='rain'){const f=rainFrames[idx]||rainFrames.at(-1);ok=rainHealthy?await drawEnhanced(f?.url,RADAR_BOUNDS,'radar',1,token):false}else{const f=reflectivityFrames[idx]||reflectivityFrames.at(-1);ok=reflectivityHealthy?await drawEnhanced(f?.url,RADAR_BOUNDS,'radar',1,token):false}if(token!==renderToken)return;drawBulacanGuide();updateLabels();if(!ok){const msg=active==='rain'?'PAGASA QPE image source is unavailable right now.':active==='radar'?'PAGASA reflectivity feed is not currently available.':active==='combined'?'Radar component unavailable; infrared remains visible.':'Weather layer is refreshing.';showNotice(msg,3200)}}"
+          if old in s: s=s.replace(old,new)
+          old="async function loadLive(announce=false){stop();const key=Math.floor(Date.now()/60000);showNotice('Refreshing official PAGASA weather data…',0);try{const r=await fetch(`/api/pagasa?action=timeline&v=${key}`,{cache:'no-store'});if(!r.ok)throw new Error(`timeline ${r.status}`);const data=await r.json(),rain=Array.isArray(data.rainfall_estimate)?data.rainfall_estimate:[],refl=Array.isArray(data.reflectivity)&&data.reflectivity.length?data.reflectivity:rain;rainFrames=rain.map(x=>({name:x.time||'PAGASA QPE',date:parsePagasaTime(x.time),url:proxy(x.url,key)}));reflectivityFrames=refl.map(x=>({name:x.time||'PAGASA Reflectivity',date:parsePagasaTime(x.time),url:proxy(x.url,key)}));radarHealthy=reflectivityFrames.length?await probeImage(reflectivityFrames.at(-1).url):false;const prod=await chooseIR(key);irFrames=[6,5,4,3,2,1].map((frame,i)=>({name:`${prod.toUpperCase()} IR ${i+1}/6`,date:new Date(Date.now()-(5-i)*10*60000),url:`/api/pagasa?action=satellite&product=${prod}&frame=${frame}&v=${key}`}));if(!radarHealthy&&active!=='ir')active='ir';document.querySelectorAll('.layer').forEach(b=>b.classList.toggle('active',b.dataset.layer===active));setDisabled();els.sourceState.textContent=radarHealthy?'LIVE DATA':`${prod.toUpperCase()} IR`;showNotice(radarHealthy?`BYDRRM decoder ready: radar + ${prod.toUpperCase()} IR.`:`PAGASA radar image host is unavailable. Re-rendered ${prod.toUpperCase()} infrared is active.`,4000);idx=Math.max(0,activeArray().length-1);syncSlider();processedCache.clear();render();if(announce)toast('Live weather data refreshed.')}catch(e){console.error(e);const prod=await chooseIR(key);irFrames=[6,5,4,3,2,1].map((frame,i)=>({name:`${prod.toUpperCase()} IR ${i+1}/6`,date:new Date(Date.now()-(5-i)*10*60000),url:`/api/pagasa?action=satellite&product=${prod}&frame=${frame}&v=${key}`}));active='ir';radarHealthy=false;setDisabled();document.querySelectorAll('.layer').forEach(b=>b.classList.toggle('active',b.dataset.layer==='ir'));els.sourceState.textContent=`${prod.toUpperCase()} IR`;idx=irFrames.length-1;syncSlider();showNotice(`Radar timeline unavailable. Re-rendered ${prod.toUpperCase()} infrared remains available.`,4200);render()}}"
+          new="async function loadLive(announce=false){stop();const key=Math.floor(Date.now()/60000);showNotice('Refreshing official PAGASA weather data…',0);try{const r=await fetch(`/api/pagasa?action=timeline&v=${key}`,{cache:'no-store'});if(!r.ok)throw new Error(`timeline ${r.status}`);const data=await r.json(),rain=Array.isArray(data.rainfall_estimate)?data.rainfall_estimate:[],refl=Array.isArray(data.reflectivity)?data.reflectivity:[];rainFrames=rain.map(x=>({name:x.time||'PAGASA QPE',date:parsePagasaTime(x.time),url:proxy(x.url,key)}));reflectivityFrames=refl.map(x=>({name:x.time||'PAGASA Reflectivity',date:parsePagasaTime(x.time),url:proxy(x.url,key)}));rainHealthy=rainFrames.length?await probeImage(rainFrames.at(-1).url):false;reflectivityHealthy=reflectivityFrames.length?await probeImage(reflectivityFrames.at(-1).url):false;radarHealthy=rainHealthy||reflectivityHealthy;const prod=await chooseIR(key);irFrames=[6,5,4,3,2,1].map((frame,i)=>({name:`${prod.toUpperCase()} IR ${i+1}/6`,date:new Date(Date.now()-(5-i)*10*60000),url:`/api/pagasa?action=satellite&product=${prod}&frame=${frame}&v=${key}`}));document.querySelectorAll('.layer').forEach(b=>b.classList.toggle('active',b.dataset.layer===active));setAvailability();els.sourceState.textContent=radarHealthy?'LIVE DATA':`${prod.toUpperCase()} IR`;const radarSummary=reflectivityHealthy&&rainHealthy?'reflectivity + QPE':reflectivityHealthy?'reflectivity':rainHealthy?'QPE':'no radar image';showNotice(`BYDRRM sources: ${radarSummary}; ${prod.toUpperCase()} IR ready.`,4000);idx=Math.max(0,activeArray().length-1);syncSlider();processedCache.clear();render();if(announce)toast('Live weather data refreshed.')}catch(e){console.error(e);const prod=await chooseIR(key);irFrames=[6,5,4,3,2,1].map((frame,i)=>({name:`${prod.toUpperCase()} IR ${i+1}/6`,date:new Date(Date.now()-(5-i)*10*60000),url:`/api/pagasa?action=satellite&product=${prod}&frame=${frame}&v=${key}`}));reflectivityHealthy=false;rainHealthy=false;radarHealthy=false;setAvailability();document.querySelectorAll('.layer').forEach(b=>b.classList.toggle('active',b.dataset.layer===active));els.sourceState.textContent=`${prod.toUpperCase()} IR`;idx=Math.max(0,activeArray().length-1);syncSlider();showNotice(`Radar timeline unavailable. Re-rendered ${prod.toUpperCase()} infrared remains available.`,4200);render()}}"
+          if old in s: s=s.replace(old,new)
+          s=s.replace("function setLayer(type){stop();if(type!=='ir'&&!radarHealthy){active='ir';showNotice('Radar source is unavailable right now; Infrared stays active.',3200)}else active=type;document.querySelectorAll('.layer').forEach(b=>b.classList.toggle('active',b.dataset.layer===active));idx=Math.max(0,activeArray().length-1);syncSlider();render()}", "function setLayer(type){stop();active=type;document.querySelectorAll('.layer').forEach(b=>b.classList.toggle('active',b.dataset.layer===active));idx=Math.max(0,activeArray().length-1);syncSlider();if(type==='radar'&&!reflectivityHealthy)showNotice('Reflectivity (dBZ) feed is not published/available right now. This is separate from Rain Rate QPE.',4200);else if(type==='rain'&&!rainHealthy)showNotice('Rain Rate QPE is selectable, but its upstream image source is currently unavailable.',4200);else if(type==='combined'&&!radarHealthy)showNotice('Combined selected: infrared is available, but the radar component is currently unavailable.',4200);render()}")
+          s=s.replace('<div class="source"><b>Data:</b> DOST-PAGASA radar products and PAGASA/MeteoPilipinas satellite imagery. <b>Visualization:</b> BYDRRM <span class="badge">RE-RENDERED</span>. Source pixels are decoded, map/background artifacts are suppressed, then weather intensity classes are painted again on the BYDRRM basemap. This is an enhanced visualization, not an official PAGASA warning product.</div>', '<div class="source"><b>Data:</b> DOST-PAGASA radar products and PAGASA/MeteoPilipinas satellite imagery. <b>Visualization:</b> BYDRRM <span class="badge">RE-RENDERED</span>. Radar Reflectivity is a dBZ-type precipitation-intensity product when PAGASA publishes that feed; Rain Rate is PAGASA QPE. These are derived from weather-radar observations, but this viewer does <b>not</b> currently display Doppler radial velocity/wind. Source pixels are decoded and re-painted on the BYDRRM basemap. This is not an official PAGASA warning product.</div>')
+          p.write_text(s)
+          PY
+          grep -q "Rain Rate QPE is selectable" weather/public/radar-live.html
+          grep -q "Doppler-derived dBZ" weather/public/radar-live.html
+
+      - name: Ensure isolated Weather Hosting site
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase hosting:sites:list --project "$FIREBASE_PROJECT_ID" --json > "$RUNNER_TEMP/sites.json"
+          if node -e 'const f=require(process.argv[1]); const id=process.argv[2]; const r=f.result||f; const sites=Array.isArray(r)?r:(Array.isArray(r.sites)?r.sites:[]); process.exit(sites.some(x=>(x.name||x.site||"").split("/").pop()===id)?0:1)' "$RUNNER_TEMP/sites.json" "$WEATHER_SITE_ID"; then
+            echo "Weather Hosting site already exists."
+          else
+            firebase hosting:sites:create "$WEATHER_SITE_ID" --project "$FIREBASE_PROJECT_ID" --non-interactive
+          fi
+
+      - name: Bind Weather hosting target
+        shell: bash
+        working-directory: weather
+        run: |
+          set -euo pipefail
+          firebase target:apply hosting weather "$WEATHER_SITE_ID" --project "$FIREBASE_PROJECT_ID"
+
+      - name: Deploy Weather public/admin site only
+        shell: bash
+        working-directory: weather
+        run: |
+          set -euo pipefail
+          firebase deploy --only hosting:weather --project "$FIREBASE_PROJECT_ID" --non-interactive
+
+      - name: Verify deployed site and PAGASA integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          SITE="https://${WEATHER_SITE_ID}.web.app"
+          curl --fail --silent --show-error "$SITE/" -o "$RUNNER_TEMP/home.html"
+          curl --fail --silent --show-error "$SITE/radar.html?verify=$(date +%s)" -o "$RUNNER_TEMP/radar.html"
+          curl --fail --silent --show-error "$SITE/radar-live.html?verify=$(date +%s)" -o "$RUNNER_TEMP/radar-live.html"
+          grep -q "BYDRRM WEATHER RADAR" "$RUNNER_TEMP/radar.html"
+          grep -q "Regional View" "$RUNNER_TEMP/radar-live.html"
+          grep -q "Bulacan Focus" "$RUNNER_TEMP/radar-live.html"
+          grep -q "Doppler-derived dBZ" "$RUNNER_TEMP/radar-live.html"
+          grep -q "Rain Rate QPE is selectable" "$RUNNER_TEMP/radar-live.html"
+
+          curl --fail --silent --show-error "$SITE/api/pagasa?action=timeline&verify=$(date +%s)" -o "$RUNNER_TEMP/timeline.json"
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/timeline.json','utf8'));
+          if (!data.ok || !Array.isArray(data.rainfall_estimate) || data.rainfall_estimate.length < 1) {
+            throw new Error('Live PAGASA radar timeline missing');
+          }
+          console.log('Live radar QPE frames:', data.rainfall_estimate.length, 'latest:', data.rainfall_estimate.at(-1).time);
+          console.log('Reflectivity frames:', Array.isArray(data.reflectivity) ? data.reflectivity.length : 0);
+          NODE
+
+          RADAR_URL=$(node -e "const d=require(process.env.RUNNER_TEMP+'/timeline.json'); process.stdout.write(encodeURIComponent(d.rainfall_estimate.at(-1).url))")
+          if curl --fail --silent --show-error "$SITE/api/pagasa?action=image&url=$RADAR_URL&verify=$(date +%s)" -o "$RUNNER_TEMP/radar.png"; then
+            test "$(wc -c < "$RUNNER_TEMP/radar.png")" -gt 1000
+            echo "Live radar QPE image proxy verified."
+          else
+            echo "::warning::PAGASA/MeteoPilipinas radar image host is currently unreachable. Rain Rate remains selectable and reports source status instead of becoming unclickable."
+          fi
+
+          if curl --fail --silent --show-error "$SITE/api/pagasa?action=satellite&product=himawari&frame=1&verify=$(date +%s)" -o "$RUNNER_TEMP/ir.png"; then
+            test "$(wc -c < "$RUNNER_TEMP/ir.png")" -gt 1000
+            echo "Himawari IR proxy verified."
+          else
+            echo "::warning::Official IR image host is temporarily unreachable."
+          fi
+
+          echo "Weather site: $SITE/"
+          echo "Radar studio: $SITE/radar-live.html"

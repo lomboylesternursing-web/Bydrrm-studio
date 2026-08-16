@@ -1,0 +1,2 @@
+BYDRRM Weather scheduled-function redeploy marker.
+Created after Cloud Scheduler IAM permission was granted so Firebase performs a fresh scheduled deployment.
