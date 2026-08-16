@@ -13,63 +13,46 @@ permissions:
 jobs:
   inspect-public-assets:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 2
     steps:
-      - name: Inspect official PAGASA radar and satellite assets
+      - name: Fast inspect official PAGASA weather map assets
         shell: bash
         run: |
           set -u
-          echo "=== PANaHON output.tif host checks ==="
+          echo "=== output.tif GET checks ==="
           for u in \
             "https://panahon.gov.ph/output.tif" \
             "https://www.panahon.gov.ph/output.tif" \
             "https://origin.panahon.gov.ph/output.tif" \
             "https://origin.docker.panahon.gov.ph/output.tif"; do
             echo "--- $u"
-            code=$(curl -L -sS -o "$RUNNER_TEMP/test.tif" -w '%{http_code}' "$u" || true)
-            echo "GET=$code size=$(wc -c < "$RUNNER_TEMP/test.tif" 2>/dev/null || echo 0)"
-            curl -L -sSI "$u" | grep -Ei 'HTTP/|content-type|content-length|access-control|last-modified|etag|location' | head -n 20 || true
-            file "$RUNNER_TEMP/test.tif" 2>/dev/null || true
+            code=$(curl --connect-timeout 3 --max-time 7 -L -sS -o "$RUNNER_TEMP/test.bin" -w '%{http_code}' "$u" || true)
+            echo "GET=$code size=$(wc -c < "$RUNNER_TEMP/test.bin" 2>/dev/null || echo 0)"
+            file "$RUNNER_TEMP/test.bin" 2>/dev/null || true
           done
 
-          echo "=== PAGASA homepage linked scripts ==="
-          curl -L -fsSL "https://www.pagasa.dost.gov.ph/" -o "$RUNNER_TEMP/pagasa.html" || true
-          python - <<'PY'
-          import os,re,pathlib,urllib.parse,urllib.request
-          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'pagasa.html'
+          for spec in \
+            "pagasa|https://www.pagasa.dost.gov.ph/" \
+            "radar|https://www.pagasa.dost.gov.ph/radar" \
+            "panahon|https://panahon.gov.ph/"; do
+            name=${spec%%|*}; url=${spec#*|}
+            echo "=== $name HTML ==="
+            curl --connect-timeout 3 --max-time 10 -L -fsSL "$url" -o "$RUNNER_TEMP/$name.html" || true
+            NAME="$name" BASE="$url" python - <<'PY'
+          import os,re,pathlib,urllib.parse
+          name=os.environ['NAME']; base=os.environ['BASE']
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/(name+'.html')
           text=p.read_text(errors='ignore') if p.exists() else ''
-          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)',text,re.I)
-          print('script_count',len(srcs))
-          for s in srcs: print(urllib.parse.urljoin('https://www.pagasa.dost.gov.ph/',s))
-          keys=re.compile(r'.{0,180}(?:radar.?mosaic|himawari|ir1|satellite|reflectivity|rain.?rate|geotiff|\.tif|tilelayer|imageoverlay|wms|wmts|api/).{0,420}',re.I|re.S)
-          print('=== PAGASA HTML hints ===')
-          for m in list(keys.finditer(text))[:100]: print(' '.join(m.group(0).split())[:900])
-          for src in srcs:
-              url=urllib.parse.urljoin('https://www.pagasa.dost.gov.ph/',src)
-              try:
-                  req=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
-                  data=urllib.request.urlopen(req,timeout=15).read().decode('utf-8','ignore')
-              except Exception:
-                  continue
-              matches=[]
-              for m in keys.finditer(data):
-                  s=' '.join(m.group(0).split())[:1100]
-                  if s not in matches: matches.append(s)
-              if matches:
-                  print('\n### SCRIPT',url)
-                  for s in matches[:80]: print(s)
+          print('bytes',len(text))
+          print('SCRIPTS')
+          for src in re.findall(r'<script[^>]+src=["\']([^"\']+)',text,re.I):
+              print(urllib.parse.urljoin(base,src))
+          print('HINTS')
+          pat=re.compile(r'.{0,180}(?:radar.?mosaic|himawari|ir1|satellite|reflectivity|rain.?rate|geotiff|\.tif|tilelayer|imageoverlay|wms|wmts|api/|output\.tif).{0,320}',re.I|re.S)
+          seen=[]
+          for m in pat.finditer(text):
+              s=' '.join(m.group(0).split())[:800]
+              if s not in seen: seen.append(s)
+          for s in seen[:100]: print(s)
           PY
-
-          echo "=== PANaHON homepage inline hints ==="
-          curl -L -fsSL "https://panahon.gov.ph/" -o "$RUNNER_TEMP/panahon.html" || true
-          python - <<'PY'
-          import os,re,pathlib
-          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'panahon.html'
-          text=p.read_text(errors='ignore') if p.exists() else ''
-          keys=['Himawari IR','Himawari','Radar Mosaic','Hybrid Reflectivity','Rain Rate','radar.html','.tif','output.tif','iframe','src.panahon']
-          for key in keys:
-              print('\n##',key)
-              for m in list(re.finditer(re.escape(key),text,re.I))[:25]:
-                  a=max(0,m.start()-550);b=min(len(text),m.end()+900)
-                  print(' '.join(text[a:b].split())[:1500])
-          PY
+          done
