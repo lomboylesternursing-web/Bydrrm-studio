@@ -15,34 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Inspect live PAGASA timeline response
+      - name: Test PAGASA HybridTimeline request variants
         shell: bash
         run: |
-          set -euo pipefail
-          curl --connect-timeout 3 --max-time 20 -L -fsS -X POST \
-            -H 'Accept: application/json' \
-            -H 'User-Agent: Mozilla/5.0' \
-            "https://pagasa.dost.gov.ph/api/HybridTimeline?t=$(date +%s)" \
-            -o "$RUNNER_TEMP/timeline.json"
-          python - <<'PY'
-          import os,json,pathlib
-          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'timeline.json'
-          raw=p.read_text(errors='ignore')
-          print('bytes',len(raw))
-          print('prefix',raw[:500])
-          try:
-              data=json.loads(raw)
-          except Exception as e:
-              print('JSON_ERROR',repr(e)); raise
-          print('TYPE',type(data).__name__)
-          if isinstance(data,dict):
-              print('KEYS',list(data.keys()))
-              for k,v in data.items():
-                  if isinstance(v,list):
-                      print('KEY',k,'COUNT',len(v))
-                      for item in v[-3:]: print('ITEM',k,item)
-                  else:
-                      print('VALUE',k,str(v)[:1000])
-          PY
-          echo '=== HIMAWARI current frame headers ==='
-          curl --connect-timeout 3 --max-time 15 -L -sSI "https://src.meteopilipinas.gov.ph/repo/mtsat-colored/24hour/1-him-colored.png" | grep -Ei 'HTTP/|content-type|content-length|access-control|last-modified|etag' || true
+          set -u
+          for host in pagasa.dost.gov.ph www.pagasa.dost.gov.ph; do
+            for method in GET POST; do
+              echo "=== $method https://$host/api/HybridTimeline ==="
+              args=(--connect-timeout 3 --max-time 12 -L -sS -D "$RUNNER_TEMP/h.txt" -o "$RUNNER_TEMP/b.txt" -w '%{http_code}')
+              if [ "$method" = POST ]; then args+=(-X POST -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' -H 'X-Requested-With: XMLHttpRequest' -H 'Origin: https://www.pagasa.dost.gov.ph' -H 'Referer: https://www.pagasa.dost.gov.ph/radar'); fi
+              args+=(-H 'Accept: application/json, text/javascript, */*; q=0.01' -H 'User-Agent: Mozilla/5.0' "https://$host/api/HybridTimeline?t=$(date +%s%3N)")
+              code=$(curl "${args[@]}" || true)
+              echo "STATUS=$code BODY_BYTES=$(wc -c < "$RUNNER_TEMP/b.txt" 2>/dev/null || echo 0)"
+              grep -Ei 'HTTP/|content-type|content-length|location|set-cookie|access-control' "$RUNNER_TEMP/h.txt" | tail -n 20 || true
+              head -c 1200 "$RUNNER_TEMP/b.txt" || true; echo
+            done
+          done
+          echo '=== HIMAWARI current frame ==='
+          code=$(curl --connect-timeout 3 --max-time 12 -L -sS -o "$RUNNER_TEMP/him.png" -w '%{http_code}' "https://src.meteopilipinas.gov.ph/repo/mtsat-colored/24hour/1-him-colored.png" || true)
+          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/him.png" 2>/dev/null || echo 0)"
+          file "$RUNNER_TEMP/him.png" || true
