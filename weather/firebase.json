@@ -1,7 +1,14 @@
 {
-  "functions": {
-    "source": "functions"
-  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default"
+    },
+    {
+      "source": "radar-functions",
+      "codebase": "radar"
+    }
+  ],
   "hosting": {
     "target": "weather",
     "public": "public",
@@ -9,6 +16,15 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/pagasa",
+        "function": {
+          "functionId": "pagasaWeatherData",
+          "region": "asia-southeast1"
+        }
+      }
     ],
     "headers": [
       {
