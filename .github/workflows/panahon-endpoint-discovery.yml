@@ -15,33 +15,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Inspect official PAGASA map JavaScript endpoints
+      - name: Inspect live PAGASA timeline response
         shell: bash
         run: |
           set -euo pipefail
-          curl --connect-timeout 3 --max-time 20 -L -fsSL "https://pagasa.dost.gov.ph/themes/hiraia/assets/js/app/home/map-ol.v2.js?t=611493538" -o "$RUNNER_TEMP/home-map.js"
-          curl --connect-timeout 3 --max-time 20 -L -fsSL "https://pagasa.dost.gov.ph/themes/hiraia/assets/js/app/radar/map.js?t=649339312" -o "$RUNNER_TEMP/radar-map.js"
+          curl --connect-timeout 3 --max-time 20 -L -fsS -X POST \
+            -H 'Accept: application/json' \
+            -H 'User-Agent: Mozilla/5.0' \
+            "https://pagasa.dost.gov.ph/api/HybridTimeline?t=$(date +%s)" \
+            -o "$RUNNER_TEMP/timeline.json"
           python - <<'PY'
-          import os,re,pathlib
-          root=pathlib.Path(os.environ['RUNNER_TEMP'])
-          for fn in ['home-map.js','radar-map.js']:
-              text=(root/fn).read_text(errors='ignore')
-              print('\n===',fn,'bytes',len(text),'===')
-              pats=[
-                  r'https?://[^"\'`\s)]+',
-                  r'["\']([^"\']*(?:radar|mosaic|himawari|satellite|rainrate|rain-rate|reflectivity|qpe|\.gif|\.png|\.jpg|\.tif|\.json|api)[^"\']*)["\']',
-              ]
-              seen=[]
-              for pat in pats:
-                  for m in re.finditer(pat,text,re.I):
-                      s=m.group(1) if m.lastindex else m.group(0)
-                      if s not in seen: seen.append(s)
-              for s in seen[:300]: print('LITERAL',s[:900])
-              print('--- CONTEXT ---')
-              ctx=re.compile(r'.{0,260}(?:radarLayer|himawariSatellite|radar_mosaic|himawari_satellite|rainrate|qpe|reflectivity|ajax|fetch|\.gif|\.png|api/).{0,520}',re.I|re.S)
-              snippets=[]
-              for m in ctx.finditer(text):
-                  s=' '.join(m.group(0).split())[:1300]
-                  if s not in snippets: snippets.append(s)
-              for s in snippets[:180]: print(s)
+          import os,json,pathlib
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'timeline.json'
+          raw=p.read_text(errors='ignore')
+          print('bytes',len(raw))
+          print('prefix',raw[:500])
+          try:
+              data=json.loads(raw)
+          except Exception as e:
+              print('JSON_ERROR',repr(e)); raise
+          print('TYPE',type(data).__name__)
+          if isinstance(data,dict):
+              print('KEYS',list(data.keys()))
+              for k,v in data.items():
+                  if isinstance(v,list):
+                      print('KEY',k,'COUNT',len(v))
+                      for item in v[-3:]: print('ITEM',k,item)
+                  else:
+                      print('VALUE',k,str(v)[:1000])
           PY
+          echo '=== HIMAWARI current frame headers ==='
+          curl --connect-timeout 3 --max-time 15 -L -sSI "https://src.meteopilipinas.gov.ph/repo/mtsat-colored/24hour/1-him-colored.png" | grep -Ei 'HTTP/|content-type|content-length|access-control|last-modified|etag' || true
