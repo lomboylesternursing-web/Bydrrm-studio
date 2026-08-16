@@ -85,8 +85,11 @@ jobs:
         run: |
           set -euo pipefail
           SITE="https://${WEATHER_SITE_ID}.web.app"
-          curl --fail --silent --show-error "$SITE/" >/dev/null
-          curl --fail --silent --show-error "$SITE/radar.html" | grep -q "BYDRRM WEATHER RADAR"
+          curl --fail --silent --show-error "$SITE/" -o "$RUNNER_TEMP/home.html"
+          curl --fail --silent --show-error "$SITE/radar.html?verify=$(date +%s)" -o "$RUNNER_TEMP/radar.html"
+          curl --fail --silent --show-error "$SITE/radar-live.html?verify=$(date +%s)" -o "$RUNNER_TEMP/radar-live.html"
+          grep -q "BYDRRM WEATHER RADAR" "$RUNNER_TEMP/radar.html"
+          grep -q "Starting native BYDRRM map" "$RUNNER_TEMP/radar-live.html"
 
           curl --fail --silent --show-error "$SITE/api/pagasa?action=timeline&verify=$(date +%s)" -o "$RUNNER_TEMP/timeline.json"
           node - <<'NODE'
@@ -103,15 +106,15 @@ jobs:
             test "$(wc -c < "$RUNNER_TEMP/radar.png")" -gt 1000
             echo "Live radar image proxy verified."
           else
-            echo "::warning::PAGASA/MeteoPilipinas radar image host is currently unreachable. Timeline is healthy; the Radar Studio will use its source-outage fallback until the official image host recovers."
+            echo "::warning::PAGASA/MeteoPilipinas radar image host is currently unreachable. Native viewer will automatically fall back to Himawari IR."
           fi
 
           if curl --fail --silent --show-error "$SITE/api/pagasa?action=satellite&product=himawari&frame=1&verify=$(date +%s)" -o "$RUNNER_TEMP/ir.png"; then
             test "$(wc -c < "$RUNNER_TEMP/ir.png")" -gt 1000
             echo "Himawari IR proxy verified."
           else
-            echo "::warning::Official IR image host is temporarily unreachable. Manual frame fallback remains available."
+            echo "::warning::Official IR image host is temporarily unreachable."
           fi
 
           echo "Weather site: $SITE/"
-          echo "Radar studio: $SITE/radar.html"
+          echo "Radar studio: $SITE/radar-live.html"
