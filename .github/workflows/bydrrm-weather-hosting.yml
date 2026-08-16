@@ -89,7 +89,8 @@ jobs:
           curl --fail --silent --show-error "$SITE/radar.html?verify=$(date +%s)" -o "$RUNNER_TEMP/radar.html"
           curl --fail --silent --show-error "$SITE/radar-live.html?verify=$(date +%s)" -o "$RUNNER_TEMP/radar-live.html"
           grep -q "BYDRRM WEATHER RADAR" "$RUNNER_TEMP/radar.html"
-          grep -q "Starting native BYDRRM map" "$RUNNER_TEMP/radar-live.html"
+          grep -q "Regional View" "$RUNNER_TEMP/radar-live.html"
+          grep -q "Bulacan Focus" "$RUNNER_TEMP/radar-live.html"
 
           curl --fail --silent --show-error "$SITE/api/pagasa?action=timeline&verify=$(date +%s)" -o "$RUNNER_TEMP/timeline.json"
           node - <<'NODE'
