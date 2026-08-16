@@ -15,29 +15,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect public PANaHON radar assets
+      - name: Inspect public PANaHON radar and IR assets
         shell: bash
         run: |
           set -euo pipefail
           curl -fsSL "https://panahon.gov.ph/radar.html" -o "$RUNNER_TEMP/radar.html"
+          curl -fsSL "https://panahon.gov.ph/" -o "$RUNNER_TEMP/home.html"
+          echo "=== RADAR BOUNDARIES / OUTPUT ==="
           python - <<'PY'
           import os,re,pathlib
           text=(pathlib.Path(os.environ['RUNNER_TEMP'])/'radar.html').read_text(errors='ignore')
-          print('=== INLINE WEATHER SNIPPETS ===')
-          pattern=re.compile(r'.{0,180}(?:radar|mosaic|reflectivity|rain.?rate|georaster|\.tif|\.tiff|imageOverlay|fetch\(|axios|api\.).{0,300}',re.I|re.S)
+          for token in ['boundaries','output.tif','GeoRasterLayer','pixelValuesToColorFn']:
+              print('\n##',token)
+              for m in list(re.finditer(re.escape(token),text,re.I))[:12]:
+                  a=max(0,m.start()-500); b=min(len(text),m.end()+900)
+                  print(' '.join(text[a:b].split())[:1600])
+          PY
+          echo "=== OUTPUT.TIF HEADERS ==="
+          curl -fsSIL "https://panahon.gov.ph/output.tif" | sed -n '1,30p'
+          curl -fsSL "https://panahon.gov.ph/output.tif" -o "$RUNNER_TEMP/output.tif"
+          file "$RUNNER_TEMP/output.tif"
+          ls -lh "$RUNNER_TEMP/output.tif"
+          identify "$RUNNER_TEMP/output.tif" 2>/dev/null | head -n 5 || true
+          echo "=== HOME SATELLITE / RADAR ENDPOINT HINTS ==="
+          python - <<'PY'
+          import os,re,pathlib
+          text=(pathlib.Path(os.environ['RUNNER_TEMP'])/'home.html').read_text(errors='ignore')
+          pat=re.compile(r'.{0,220}(?:himawari|satellite|radar.?mosaic|hybrid.?reflect|rain.?rate|\.tif|\.tiff|fetch\(|georaster|imageOverlay).{0,420}',re.I|re.S)
           seen=[]
-          for m in pattern.finditer(text):
+          for m in pat.finditer(text):
               s=' '.join(m.group(0).split())
-              if s not in seen:
-                  seen.append(s)
-          for s in seen[:140]:
-              print(s[:700])
-          print('=== URL LITERALS ===')
-          urls=sorted(set(re.findall(r'https?://[^"\'`<>\s]+',text)))
-          for u in urls:
-              print(u[:500])
-          print('=== TIFF/IMAGE PATH LITERALS ===')
-          paths=sorted(set(re.findall(r'["\']([^"\']+\.(?:tif|tiff|png|jpg|jpeg|webp)(?:\?[^"\']*)?)["\']',text,re.I)))
-          for p in paths[:200]:
-              print(p)
+              if s not in seen: seen.append(s)
+          for s in seen[:180]: print(s[:1000])
+          print('=== HOME TIFF/IMAGE LITERALS ===')
+          for p in sorted(set(re.findall(r'["\']([^"\']+\.(?:tif|tiff|png|jpg|jpeg|webp)(?:\?[^"\']*)?)["\']',text,re.I)))[:250]: print(p)
           PY
