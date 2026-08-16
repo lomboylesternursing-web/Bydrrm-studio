@@ -13,25 +13,41 @@ permissions:
 jobs:
   inspect-public-assets:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
-      - name: Test PAGASA HybridTimeline request variants
+      - name: Diagnose live PAGASA radar image fetch
         shell: bash
         run: |
-          set -u
-          for host in pagasa.dost.gov.ph www.pagasa.dost.gov.ph; do
-            for method in GET POST; do
-              echo "=== $method https://$host/api/HybridTimeline ==="
-              args=(--connect-timeout 3 --max-time 12 -L -sS -D "$RUNNER_TEMP/h.txt" -o "$RUNNER_TEMP/b.txt" -w '%{http_code}')
-              if [ "$method" = POST ]; then args+=(-X POST -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' -H 'X-Requested-With: XMLHttpRequest' -H 'Origin: https://www.pagasa.dost.gov.ph' -H 'Referer: https://www.pagasa.dost.gov.ph/radar'); fi
-              args+=(-H 'Accept: application/json, text/javascript, */*; q=0.01' -H 'User-Agent: Mozilla/5.0' "https://$host/api/HybridTimeline?t=$(date +%s%3N)")
-              code=$(curl "${args[@]}" || true)
-              echo "STATUS=$code BODY_BYTES=$(wc -c < "$RUNNER_TEMP/b.txt" 2>/dev/null || echo 0)"
-              grep -Ei 'HTTP/|content-type|content-length|location|set-cookie|access-control' "$RUNNER_TEMP/h.txt" | tail -n 20 || true
-              head -c 1200 "$RUNNER_TEMP/b.txt" || true; echo
-            done
-          done
-          echo '=== HIMAWARI current frame ==='
-          code=$(curl --connect-timeout 3 --max-time 12 -L -sS -o "$RUNNER_TEMP/him.png" -w '%{http_code}' "https://src.meteopilipinas.gov.ph/repo/mtsat-colored/24hour/1-him-colored.png" || true)
-          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/him.png" 2>/dev/null || echo 0)"
-          file "$RUNNER_TEMP/him.png" || true
+          set -euo pipefail
+          curl --connect-timeout 3 --max-time 20 -L -fsS -X POST \
+            -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' \
+            -H 'X-Requested-With: XMLHttpRequest' \
+            -H 'Origin: https://www.pagasa.dost.gov.ph' \
+            -H 'Referer: https://www.pagasa.dost.gov.ph/radar' \
+            -H 'Accept: application/json, text/javascript, */*; q=0.01' \
+            -H 'User-Agent: Mozilla/5.0' \
+            "https://www.pagasa.dost.gov.ph/api/HybridTimeline?t=$(date +%s%3N)" \
+            -o "$RUNNER_TEMP/timeline.json"
+
+          RADAR_URL=$(node -e "const d=require(process.env.RUNNER_TEMP+'/timeline.json'); process.stdout.write(d.rainfall_estimate.at(-1).url)")
+          echo "RADAR_URL=$RADAR_URL"
+
+          echo '=== DIRECT RADAR IMAGE ==='
+          code=$(curl --connect-timeout 5 --max-time 25 -L -sS -D "$RUNNER_TEMP/direct-h.txt" -o "$RUNNER_TEMP/direct.bin" -w '%{http_code}' \
+            -H 'Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8' \
+            -H 'Referer: https://www.pagasa.dost.gov.ph/' \
+            -H 'User-Agent: Mozilla/5.0 BYDRRM-Weather-Radar/1.0' \
+            "$RADAR_URL" || true)
+          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/direct.bin" 2>/dev/null || echo 0)"
+          grep -Ei 'HTTP/|content-type|content-length|location|server|access-control' "$RUNNER_TEMP/direct-h.txt" || true
+          file "$RUNNER_TEMP/direct.bin" || true
+          head -c 300 "$RUNNER_TEMP/direct.bin" || true; echo
+
+          echo '=== DEPLOYED PROXY ==='
+          ENC=$(node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$RADAR_URL")
+          code=$(curl --connect-timeout 5 --max-time 30 -L -sS -D "$RUNNER_TEMP/proxy-h.txt" -o "$RUNNER_TEMP/proxy.bin" -w '%{http_code}' \
+            "https://bydrrm-weather.web.app/api/pagasa?action=image&url=$ENC&diag=$(date +%s)" || true)
+          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/proxy.bin" 2>/dev/null || echo 0)"
+          grep -Ei 'HTTP/|content-type|content-length|server|x-cloud-trace|cache-control' "$RUNNER_TEMP/proxy-h.txt" || true
+          file "$RUNNER_TEMP/proxy.bin" || true
+          head -c 1200 "$RUNNER_TEMP/proxy.bin" || true; echo
