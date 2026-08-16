@@ -84,5 +84,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error "https://${WEATHER_SITE_ID}.web.app/" >/dev/null
-          echo "Weather site: https://${WEATHER_SITE_ID}.web.app/"
+          SITE="https://${WEATHER_SITE_ID}.web.app"
+          curl --fail --silent --show-error "$SITE/" >/dev/null
+          curl --fail --silent --show-error "$SITE/radar.html" | grep -q "BYDRRM WEATHER RADAR"
+          echo "Weather site: $SITE/"
+          echo "Radar studio: $SITE/radar.html"
