@@ -34,20 +34,29 @@ The Radar Studio is available at `/radar.html` and uses the same BYDRRM logo alr
 
 Features:
 - Bulacan-centered interactive map with municipal boundaries and a highlighted province outline
-- Layer modes: Radar (dBZ), Rain Rate (mm/hr), Infrared (°C), and Combined
-- Windy-inspired infrared palette: gray/green/yellow/orange/red/dark red while preserving correct scientific units
-- Embedded official PAGASA PANaHON radar viewer for live source reference
-- Local multi-frame image loading for PAGASA radar/satellite frames
-- Adjustable frame opacity and geographic bounds calibration
+- Automatic live PAGASA Radar Mosaic/QPE timeline
+- Official PAGASA Himawari enhanced infrared frames
+- Layer modes: Radar Mosaic, Rain Rate, Infrared, and Combined
+- Windy-inspired dark scientific interface and enhanced-IR legend styling
+- Embedded official PAGASA/PANaHON radar viewer for direct source comparison
+- Automatic refresh every 5 minutes
+- Local multi-frame image loading retained as a manual fallback
+- Adjustable frame opacity and manual geographic bounds calibration
 - Timeline playback with previous/next controls
 - Clean branded PNG export for the current frame
 - Animated GIF export from up to 12 chronological frames
 - BYDRRM logo, timestamp, layer label, legend and DOST-PAGASA source attribution on exports
 
-### Important data-source behavior
-PANaHON publicly exposes Radar Mosaic, Hybrid Reflectivity, Rain Rate and Himawari IR in its interactive viewer, but this repository does not assume or invent an undocumented public machine-readable tile/image API. The page therefore keeps the official PANaHON viewer embedded as the live reference and accepts official image frames locally for BYDRRM overlay/export.
+### Live data sources and scientific labeling
+The live radar timeline is the same `HybridTimeline` endpoint used by PAGASA's public radar/map JavaScript. Its current response exposes `rainfall_estimate` frames under the national Radar Quantitative Precipitation Estimation/QPE product; the current `reflectivity` array is empty. The BYDRRM page therefore labels the live radar as Radar Mosaic/QPE and does not falsely present it as dBZ reflectivity.
 
-When PAGASA provides or confirms a stable machine-readable radar/satellite endpoint suitable for third-party use, connect it in `public/assets/radar.js` and keep the current local-frame workflow as a manual fallback. Do not label third-party radar data as PAGASA data.
+PAGASA's public map JavaScript also uses enhanced Himawari frames from the MeteoPilipinas/PAGASA satellite repository. BYDRRM preserves those source image colors rather than inventing an unverified cloud-top-temperature conversion. The interface uses a Windy-inspired visual treatment around the imagery, while the meteorological pixels remain from the official source.
+
+A dedicated Firebase HTTPS function in `radar-functions/` proxies only allow-listed PAGASA/MeteoPilipinas image hosts. This avoids browser CORS/export problems and prevents the endpoint from becoming a general-purpose proxy.
+
+Official map extents discovered from PAGASA's public JavaScript are used directly:
+- Radar: west 115.969111093, south 3.80912641587, east 129.511990464, north 22.322581275
+- Satellite: west 103.99541937000095, south -1.0593208520000024, east 147.02927158600028, north 30.014531363000003
 
 Municipal boundaries are loaded from the open `faeldon/philippines-json-maps` dataset, with a built-in Bulacan province polygon fallback if the external boundary file is unavailable.
 
@@ -81,11 +90,13 @@ firebase hosting:sites:create bydrrm-weather
 firebase target:apply hosting weather bydrrm-weather
 ```
 
-Then deploy only this new site and weather functions:
+Then deploy the Weather functions and isolated site:
 ```bash
 cd functions
 npm install
 npm test
+cd ../radar-functions
+npm install
 cd ..
 firebase deploy --only functions
 firebase deploy --only hosting:weather
