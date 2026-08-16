@@ -23,8 +23,9 @@ jobs:
           curl -fsSL "$BASE/radar.html" -o "$RUNNER_TEMP/radar.html"
           echo "=== SCRIPT SOURCES ==="
           python - <<'PY'
-          import re, pathlib
-          text=pathlib.Path("${RUNNER_TEMP}/radar.html").read_text(errors="ignore")
+          import os, re, pathlib
+          path=pathlib.Path(os.environ['RUNNER_TEMP'])/'radar.html'
+          text=path.read_text(errors='ignore')
           for src in re.findall(r'<script[^>]+src=["\']([^"\']+)', text, re.I):
               print(src)
           PY
@@ -32,9 +33,10 @@ jobs:
           grep -Eoi 'https?://[^"'"'"' <>]+|/[A-Za-z0-9_./?=&%-]*(radar|mosaic|himawari|satellite|reflect|rainrate|rain-rate)[A-Za-z0-9_./?=&%-]*' "$RUNNER_TEMP/radar.html" | sort -u | head -n 100 || true
           echo "=== JAVASCRIPT HINTS ==="
           python - <<'PY'
-          import re, pathlib, urllib.parse, urllib.request
+          import os, re, pathlib, urllib.parse, urllib.request
           base='https://panahon.gov.ph/radar.html'
-          text=pathlib.Path("${RUNNER_TEMP}/radar.html").read_text(errors='ignore')
+          path=pathlib.Path(os.environ['RUNNER_TEMP'])/'radar.html'
+          text=path.read_text(errors='ignore')
           srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)', text, re.I)
           keys=re.compile(r'.{0,100}(?:radar|mosaic|himawari|satellite|reflectivity|rain.?rate|tileLayer|imageOverlay|wms|wmts|geoserver).{0,180}', re.I)
           for src in srcs:
