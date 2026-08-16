@@ -6,14 +6,15 @@
   <meta name="theme-color" content="#071016">
   <title>BYDRRM Weather Radar</title>
   <meta name="description" content="Bulacan-focused live PAGASA radar and infrared monitoring studio by Bulacan Youth DRRM.">
-  <link rel="preconnect" href="https://unpkg.com">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <link rel="stylesheet" href="/assets/radar.css">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link id="leafletCss" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'">
+  <link rel="stylesheet" href="/assets/radar.css?v=20260816-2203">
 </head>
 <body>
   <header class="radar-topbar no-export">
     <a class="radar-brand" href="/" aria-label="Back to BYDRRM Weather">
-      <img src="/assets/bydrrm-logo.png" alt="BYDRRM logo">
+      <span class="logo-plate"><img src="/assets/bydrrm-logo.png?v=2" alt="BYDRRM logo"></span>
       <span><b>BYDRRM WEATHER RADAR</b><small>Bulacan Live Radar & Infrared Monitor</small></span>
     </a>
     <div class="radar-actions">
@@ -42,7 +43,7 @@
 
         <div class="export-branding">
           <div class="export-title">
-            <img src="/assets/bydrrm-logo.png" alt="">
+            <span class="logo-plate export-logo"><img src="/assets/bydrrm-logo.png?v=2" alt="BYDRRM logo"></span>
             <div><b>BYDRRM WEATHER RADAR</b><span id="exportLayerName">RADAR MOSAIC · BULACAN</span></div>
           </div>
           <div class="export-time"><b id="exportTime">--:-- PHT</b><span id="exportDate">--</span></div>
@@ -55,14 +56,14 @@
         </div>
 
         <div class="source-bug">DATA: DOST-PAGASA · MAP/EXPORT: BYDRRM</div>
-        <div class="frame-state" id="frameState">Loading official PAGASA weather frames…</div>
+        <div class="frame-state" id="frameState">Starting BYDRRM weather map…</div>
       </div>
 
       <aside class="side-panel no-export">
         <div class="panel-card source-panel">
           <div class="panel-kicker">OFFICIAL SOURCE CHECK</div>
           <h2>PAGASA Radar Monitor</h2>
-          <p>The BYDRRM map now loads the official PAGASA radar timeline automatically. This embedded panel remains available for direct source comparison.</p>
+          <p>The BYDRRM map loads the official PAGASA radar timeline automatically. This embedded panel remains available for direct source comparison.</p>
           <div class="viewer-wrap"><iframe id="pagasaViewer" src="https://panahon.gov.ph/radar.html" title="Official PAGASA radar map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>
           <div class="source-links">
             <a href="https://www.pagasa.dost.gov.ph/radar" target="_blank" rel="noopener">Open PAGASA Radar ↗</a>
@@ -106,7 +107,7 @@
       <button id="playFrames" class="play-btn">▶ Play</button>
       <input id="frameSlider" type="range" min="0" max="0" value="0" step="1">
       <button id="nextFrame" aria-label="Next frame">▶</button>
-      <div class="timeline-time" id="timelineTime">Loading…</div>
+      <div class="timeline-time" id="timelineTime">Starting…</div>
     </section>
 
     <section class="method-note no-export">
@@ -114,9 +115,81 @@
     </section>
   </main>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.4.5/gifshot.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="/assets/radar.js"></script>
+  <script>
+    (function () {
+      const state = document.getElementById('frameState');
+      const clock = document.getElementById('clock');
+      const exportTime = document.getElementById('exportTime');
+      const exportDate = document.getElementById('exportDate');
+
+      function updateBasicClock() {
+        const now = new Date();
+        const time = new Intl.DateTimeFormat('en-PH', {timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit',hour12:true}).format(now) + ' PHT';
+        const date = new Intl.DateTimeFormat('en-PH', {timeZone:'Asia/Manila',day:'2-digit',month:'short',year:'numeric'}).format(now).toUpperCase();
+        clock.textContent = time;
+        exportTime.textContent = time;
+        exportDate.textContent = date;
+      }
+      updateBasicClock();
+      setInterval(updateBasicClock, 30000);
+
+      function loadScript(url) {
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = url;
+          s.async = false;
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('Failed to load ' + url));
+          document.body.appendChild(s);
+        });
+      }
+
+      async function ensureGlobal(name, urls) {
+        if (window[name]) return true;
+        for (const url of urls) {
+          try {
+            await loadScript(url);
+            if (window[name]) return true;
+          } catch (_) {}
+        }
+        return false;
+      }
+
+      async function start() {
+        state.textContent = 'Loading map engine…';
+        const leafletReady = await ensureGlobal('L', [
+          'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
+          'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+          'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+        ]);
+
+        if (!leafletReady) {
+          state.textContent = 'Map engine could not load on this connection. Tap Refresh live source or reload the page.';
+          document.getElementById('fileSummary').textContent = 'Map library connection failed · your PAGASA source is not the problem';
+          return;
+        }
+
+        state.textContent = 'Connecting to official PAGASA weather frames…';
+        await ensureGlobal('html2canvas', [
+          'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+          'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+        ]);
+        await ensureGlobal('gifshot', [
+          'https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.4.5/gifshot.min.js',
+          'https://cdn.jsdelivr.net/npm/gifshot@0.4.5/build/gifshot.min.js'
+        ]);
+
+        try {
+          await loadScript('/assets/radar.js?v=20260816-2203');
+        } catch (error) {
+          console.error(error);
+          state.textContent = 'BYDRRM radar controller failed to start. Please reload this page.';
+          document.getElementById('fileSummary').textContent = 'Radar controller load failed';
+        }
+      }
+
+      start();
+    })();
+  </script>
 </body>
 </html>
