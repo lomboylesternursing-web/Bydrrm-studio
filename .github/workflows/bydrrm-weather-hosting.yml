@@ -80,12 +80,31 @@ jobs:
           set -euo pipefail
           firebase deploy --only hosting:weather --project "$FIREBASE_PROJECT_ID" --non-interactive
 
-      - name: Verify deployed site
+      - name: Verify deployed site and live PAGASA proxy
         shell: bash
         run: |
           set -euo pipefail
           SITE="https://${WEATHER_SITE_ID}.web.app"
           curl --fail --silent --show-error "$SITE/" >/dev/null
           curl --fail --silent --show-error "$SITE/radar.html" | grep -q "BYDRRM WEATHER RADAR"
+
+          curl --fail --silent --show-error "$SITE/api/pagasa?action=timeline&verify=$(date +%s)" -o "$RUNNER_TEMP/timeline.json"
+          node - <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/timeline.json','utf8'));
+          if (!data.ok || !Array.isArray(data.rainfall_estimate) || data.rainfall_estimate.length < 1) {
+            throw new Error('Live PAGASA radar timeline missing');
+          }
+          console.log('Live radar frames:', data.rainfall_estimate.length, 'latest:', data.rainfall_estimate.at(-1).time);
+          NODE
+
+          RADAR_URL=$(node -e "const d=require(process.env.RUNNER_TEMP+'/timeline.json'); process.stdout.write(encodeURIComponent(d.rainfall_estimate.at(-1).url))")
+          curl --fail --silent --show-error "$SITE/api/pagasa?action=image&url=$RADAR_URL&verify=$(date +%s)" -o "$RUNNER_TEMP/radar.png"
+          test "$(wc -c < "$RUNNER_TEMP/radar.png")" -gt 1000
+
+          curl --fail --silent --show-error "$SITE/api/pagasa?action=satellite&product=himawari&frame=1&verify=$(date +%s)" -o "$RUNNER_TEMP/ir.png"
+          test "$(wc -c < "$RUNNER_TEMP/ir.png")" -gt 1000
+
           echo "Weather site: $SITE/"
           echo "Radar studio: $SITE/radar.html"
+          echo "Live PAGASA radar + IR proxy verified."
