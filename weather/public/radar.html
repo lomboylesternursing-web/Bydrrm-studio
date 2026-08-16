@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071016">
+  <title>BYDRRM Weather Radar</title>
+  <meta name="description" content="Bulacan-focused PAGASA radar and infrared monitoring studio by Bulacan Youth DRRM.">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="/assets/radar.css">
+</head>
+<body>
+  <header class="radar-topbar no-export">
+    <a class="radar-brand" href="/" aria-label="Back to BYDRRM Weather">
+      <img src="/assets/bydrrm-logo.png" alt="BYDRRM logo">
+      <span><b>BYDRRM WEATHER RADAR</b><small>Bulacan Live Radar & Infrared Monitor</small></span>
+    </a>
+    <div class="radar-actions">
+      <a class="ghost-btn" href="/">Advisories</a>
+      <button class="ghost-btn" id="fitBulacan">Fit Bulacan</button>
+      <button class="ghost-btn" id="refreshViewer">Refresh source</button>
+    </div>
+  </header>
+
+  <main class="radar-shell">
+    <section class="status-strip no-export">
+      <div><span class="live-dot"></span><strong>Official source reference:</strong> DOST-PAGASA / PANaHON</div>
+      <div id="clock">--:-- PHT</div>
+    </section>
+
+    <section class="layer-bar no-export" aria-label="Weather layers">
+      <button class="layer-btn active" data-layer="radar">Radar <small>dBZ</small></button>
+      <button class="layer-btn" data-layer="rain">Rain Rate <small>mm/hr</small></button>
+      <button class="layer-btn" data-layer="ir">Infrared <small>°C</small></button>
+      <button class="layer-btn" data-layer="combined">Combined <small>Radar + IR</small></button>
+    </section>
+
+    <section class="workspace">
+      <div class="capture-zone" id="captureZone">
+        <div id="map" aria-label="Bulacan weather map"></div>
+
+        <div class="export-branding">
+          <div class="export-title">
+            <img src="/assets/bydrrm-logo.png" alt="">
+            <div><b>BYDRRM WEATHER RADAR</b><span id="exportLayerName">RADAR · BULACAN</span></div>
+          </div>
+          <div class="export-time"><b id="exportTime">--:-- PHT</b><span id="exportDate">--</span></div>
+        </div>
+
+        <div class="legend-card" id="legendCard">
+          <div class="legend-head"><b id="legendTitle">RADAR REFLECTIVITY</b><span id="legendUnit">dBZ</span></div>
+          <div class="legend-gradient radar-gradient" id="legendGradient"></div>
+          <div class="legend-labels" id="legendLabels"><span>Light</span><span>Moderate</span><span>Heavy</span><span>Extreme</span></div>
+        </div>
+
+        <div class="source-bug">DATA SOURCE: DOST-PAGASA · BYDRRM VISUALIZATION</div>
+        <div class="frame-state" id="frameState">No external weather frame loaded</div>
+      </div>
+
+      <aside class="side-panel no-export">
+        <div class="panel-card source-panel">
+          <div class="panel-kicker">OFFICIAL LIVE SOURCE</div>
+          <h2>PAGASA Radar Monitor</h2>
+          <p>The embedded monitor remains the official live reference. The BYDRRM map at left adds Bulacan boundaries, branding and export tools.</p>
+          <div class="viewer-wrap"><iframe id="pagasaViewer" src="https://panahon.gov.ph/radar.html" title="Official PAGASA radar map" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe></div>
+          <div class="source-links">
+            <a href="https://panahon.gov.ph/radar.html" target="_blank" rel="noopener">Open PANaHON Radar ↗</a>
+            <a href="https://www.panahon.gov.ph/" target="_blank" rel="noopener">Open PANaHON Layers ↗</a>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-kicker">FRAME INPUT</div>
+          <h3>Load PAGASA frame(s)</h3>
+          <p>Use one image for PNG output or select multiple chronological frames for animation. Images stay only in your browser.</p>
+          <label class="file-btn">Choose image frames<input id="frameFiles" type="file" accept="image/png,image/jpeg,image/webp" multiple></label>
+          <div class="file-summary" id="fileSummary">No frames selected</div>
+          <details class="advanced">
+            <summary>Overlay calibration</summary>
+            <div class="bounds-grid">
+              <label>North<input id="north" type="number" step="0.01" value="19.60"></label>
+              <label>South<input id="south" type="number" step="0.01" value="13.20"></label>
+              <label>West<input id="west" type="number" step="0.01" value="119.20"></label>
+              <label>East<input id="east" type="number" step="0.01" value="123.80"></label>
+            </div>
+            <label class="range-label">Weather layer opacity <input id="weatherOpacity" type="range" min="0" max="1" value="0.82" step="0.02"></label>
+          </details>
+        </div>
+
+        <div class="panel-card export-panel">
+          <div class="panel-kicker">EXPORT STUDIO</div>
+          <h3>Ready for posting</h3>
+          <label class="toggle-row"><input id="cleanExport" type="checkbox" checked><span>Clean export mode</span></label>
+          <div class="export-buttons">
+            <button class="primary-btn" id="savePng">Save PNG</button>
+            <button class="primary-btn" id="saveGif">Save GIF</button>
+          </div>
+          <p class="export-note" id="exportNote">PNG captures the current frame. GIF uses up to 12 loaded frames.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="timeline no-export">
+      <button id="prevFrame" aria-label="Previous frame">◀</button>
+      <button id="playFrames" class="play-btn">▶ Play</button>
+      <input id="frameSlider" type="range" min="0" max="0" value="0" step="1">
+      <button id="nextFrame" aria-label="Next frame">▶</button>
+      <div class="timeline-time" id="timelineTime">No frame</div>
+    </section>
+
+    <section class="method-note no-export">
+      <b>Scientific labeling:</b> Infrared colors represent cloud-top temperature, while radar colors represent reflectivity/rainfall intensity. BYDRRM does not convert one into the other or issue meteorological warnings. Continue following official PAGASA bulletins for decisions.
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gifshot/0.4.5/gifshot.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="/assets/radar.js"></script>
+</body>
+</html>
