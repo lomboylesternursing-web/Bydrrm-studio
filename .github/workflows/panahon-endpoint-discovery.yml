@@ -15,10 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Diagnose live PAGASA radar image fetch
+      - name: Test DNS-over-HTTPS fallback for MeteoPilipinas
         shell: bash
         run: |
           set -euo pipefail
+          echo '=== DNS.GOOGLE ==='
+          curl --connect-timeout 3 --max-time 15 -fsSL -H 'accept: application/dns-json' \
+            'https://dns.google/resolve?name=api.meteopilipinas.gov.ph&type=A' \
+            -o "$RUNNER_TEMP/dns.json"
+          cat "$RUNNER_TEMP/dns.json"; echo
+          IP=$(node -e "const d=require(process.env.RUNNER_TEMP+'/dns.json'); const a=(d.Answer||[]).find(x=>x.type===1); if(!a) process.exit(2); process.stdout.write(a.data)")
+          echo "IP=$IP"
+
           curl --connect-timeout 3 --max-time 20 -L -fsS -X POST \
             -H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' \
             -H 'X-Requested-With: XMLHttpRequest' \
@@ -28,26 +36,15 @@ jobs:
             -H 'User-Agent: Mozilla/5.0' \
             "https://www.pagasa.dost.gov.ph/api/HybridTimeline?t=$(date +%s%3N)" \
             -o "$RUNNER_TEMP/timeline.json"
-
           RADAR_URL=$(node -e "const d=require(process.env.RUNNER_TEMP+'/timeline.json'); process.stdout.write(d.rainfall_estimate.at(-1).url)")
+          PATH_ONLY=$(node -e "const u=new URL(process.argv[1]); process.stdout.write(u.pathname+u.search)" "$RADAR_URL")
           echo "RADAR_URL=$RADAR_URL"
 
-          echo '=== DIRECT RADAR IMAGE ==='
-          code=$(curl --connect-timeout 5 --max-time 25 -L -sS -D "$RUNNER_TEMP/direct-h.txt" -o "$RUNNER_TEMP/direct.bin" -w '%{http_code}' \
-            -H 'Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8' \
-            -H 'Referer: https://www.pagasa.dost.gov.ph/' \
-            -H 'User-Agent: Mozilla/5.0 BYDRRM-Weather-Radar/1.0' \
-            "$RADAR_URL" || true)
-          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/direct.bin" 2>/dev/null || echo 0)"
-          grep -Ei 'HTTP/|content-type|content-length|location|server|access-control' "$RUNNER_TEMP/direct-h.txt" || true
-          file "$RUNNER_TEMP/direct.bin" || true
-          head -c 300 "$RUNNER_TEMP/direct.bin" || true; echo
-
-          echo '=== DEPLOYED PROXY ==='
-          ENC=$(node -e "process.stdout.write(encodeURIComponent(process.argv[1]))" "$RADAR_URL")
-          code=$(curl --connect-timeout 5 --max-time 30 -L -sS -D "$RUNNER_TEMP/proxy-h.txt" -o "$RUNNER_TEMP/proxy.bin" -w '%{http_code}' \
-            "https://bydrrm-weather.web.app/api/pagasa?action=image&url=$ENC&diag=$(date +%s)" || true)
-          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/proxy.bin" 2>/dev/null || echo 0)"
-          grep -Ei 'HTTP/|content-type|content-length|server|x-cloud-trace|cache-control' "$RUNNER_TEMP/proxy-h.txt" || true
-          file "$RUNNER_TEMP/proxy.bin" || true
-          head -c 1200 "$RUNNER_TEMP/proxy.bin" || true; echo
+          echo '=== CURL --RESOLVE ==='
+          code=$(curl --connect-timeout 5 --max-time 25 --resolve "api.meteopilipinas.gov.ph:443:$IP" \
+            -L -sS -D "$RUNNER_TEMP/h.txt" -o "$RUNNER_TEMP/radar.bin" -w '%{http_code}' \
+            -H 'Referer: https://www.pagasa.dost.gov.ph/' -H 'User-Agent: Mozilla/5.0' \
+            "https://api.meteopilipinas.gov.ph$PATH_ONLY" || true)
+          echo "STATUS=$code SIZE=$(wc -c < "$RUNNER_TEMP/radar.bin" 2>/dev/null || echo 0)"
+          grep -Ei 'HTTP/|content-type|content-length|server|access-control' "$RUNNER_TEMP/h.txt" || true
+          file "$RUNNER_TEMP/radar.bin" || true
