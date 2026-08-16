@@ -15,44 +15,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Fast inspect official PAGASA weather map assets
+      - name: Inspect official PAGASA map JavaScript endpoints
         shell: bash
         run: |
-          set -u
-          echo "=== output.tif GET checks ==="
-          for u in \
-            "https://panahon.gov.ph/output.tif" \
-            "https://www.panahon.gov.ph/output.tif" \
-            "https://origin.panahon.gov.ph/output.tif" \
-            "https://origin.docker.panahon.gov.ph/output.tif"; do
-            echo "--- $u"
-            code=$(curl --connect-timeout 3 --max-time 7 -L -sS -o "$RUNNER_TEMP/test.bin" -w '%{http_code}' "$u" || true)
-            echo "GET=$code size=$(wc -c < "$RUNNER_TEMP/test.bin" 2>/dev/null || echo 0)"
-            file "$RUNNER_TEMP/test.bin" 2>/dev/null || true
-          done
-
-          for spec in \
-            "pagasa|https://www.pagasa.dost.gov.ph/" \
-            "radar|https://www.pagasa.dost.gov.ph/radar" \
-            "panahon|https://panahon.gov.ph/"; do
-            name=${spec%%|*}; url=${spec#*|}
-            echo "=== $name HTML ==="
-            curl --connect-timeout 3 --max-time 10 -L -fsSL "$url" -o "$RUNNER_TEMP/$name.html" || true
-            NAME="$name" BASE="$url" python - <<'PY'
-          import os,re,pathlib,urllib.parse
-          name=os.environ['NAME']; base=os.environ['BASE']
-          p=pathlib.Path(os.environ['RUNNER_TEMP'])/(name+'.html')
-          text=p.read_text(errors='ignore') if p.exists() else ''
-          print('bytes',len(text))
-          print('SCRIPTS')
-          for src in re.findall(r'<script[^>]+src=["\']([^"\']+)',text,re.I):
-              print(urllib.parse.urljoin(base,src))
-          print('HINTS')
-          pat=re.compile(r'.{0,180}(?:radar.?mosaic|himawari|ir1|satellite|reflectivity|rain.?rate|geotiff|\.tif|tilelayer|imageoverlay|wms|wmts|api/|output\.tif).{0,320}',re.I|re.S)
-          seen=[]
-          for m in pat.finditer(text):
-              s=' '.join(m.group(0).split())[:800]
-              if s not in seen: seen.append(s)
-          for s in seen[:100]: print(s)
+          set -euo pipefail
+          curl --connect-timeout 3 --max-time 20 -L -fsSL "https://pagasa.dost.gov.ph/themes/hiraia/assets/js/app/home/map-ol.v2.js?t=611493538" -o "$RUNNER_TEMP/home-map.js"
+          curl --connect-timeout 3 --max-time 20 -L -fsSL "https://pagasa.dost.gov.ph/themes/hiraia/assets/js/app/radar/map.js?t=649339312" -o "$RUNNER_TEMP/radar-map.js"
+          python - <<'PY'
+          import os,re,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          for fn in ['home-map.js','radar-map.js']:
+              text=(root/fn).read_text(errors='ignore')
+              print('\n===',fn,'bytes',len(text),'===')
+              pats=[
+                  r'https?://[^"\'`\s)]+',
+                  r'["\']([^"\']*(?:radar|mosaic|himawari|satellite|rainrate|rain-rate|reflectivity|qpe|\.gif|\.png|\.jpg|\.tif|\.json|api)[^"\']*)["\']',
+              ]
+              seen=[]
+              for pat in pats:
+                  for m in re.finditer(pat,text,re.I):
+                      s=m.group(1) if m.lastindex else m.group(0)
+                      if s not in seen: seen.append(s)
+              for s in seen[:300]: print('LITERAL',s[:900])
+              print('--- CONTEXT ---')
+              ctx=re.compile(r'.{0,260}(?:radarLayer|himawariSatellite|radar_mosaic|himawari_satellite|rainrate|qpe|reflectivity|ajax|fetch|\.gif|\.png|api/).{0,520}',re.I|re.S)
+              snippets=[]
+              for m in ctx.finditer(text):
+                  s=' '.join(m.group(0).split())[:1300]
+                  if s not in snippets: snippets.append(s)
+              for s in snippets[:180]: print(s)
           PY
-          done
