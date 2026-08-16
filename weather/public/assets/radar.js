@@ -56,7 +56,7 @@
   };
 
   let municipalityLayer = null;
-  let outerLayer = L.geoJSON(fallbackBulacan, { style: outerStyle }).addTo(map);
+  const outerLayer = L.geoJSON(fallbackBulacan, { style: outerStyle }).addTo(map);
   let bulacanBounds = outerLayer.getBounds();
   let activeLayer = 'radar';
   let frames = [];
@@ -207,9 +207,6 @@
   els.fitBulacan.addEventListener('click', () => map.fitBounds(bulacanBounds.pad(0.08)));
   els.refreshViewer.addEventListener('click', () => { els.viewer.src = els.viewer.src.split('#')[0]; toast('Official PAGASA viewer refreshed.'); });
 
-  els.cleanExport.addEventListener('change', () => document.body.classList.toggle('clean-export', els.cleanExport.checked));
-  document.body.classList.toggle('clean-export', els.cleanExport.checked);
-
   function toast(message) {
     const old = document.querySelector('.toast');
     if (old) old.remove();
@@ -231,6 +228,7 @@
   async function captureCurrent(scale = 2) {
     if (!window.html2canvas) throw new Error('PNG renderer did not load');
     document.body.classList.add('is-exporting');
+    if (els.cleanExport.checked) document.body.classList.add('clean-export');
     await new Promise(r => setTimeout(r, 180));
     try {
       return await html2canvas(els.capture, {
@@ -239,6 +237,7 @@
       });
     } finally {
       document.body.classList.remove('is-exporting');
+      document.body.classList.remove('clean-export');
     }
   }
 
