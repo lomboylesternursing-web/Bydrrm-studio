@@ -6,6 +6,7 @@ on:
       - agent/bydrrm-weather-v1
     paths:
       - "weather/functions/**"
+      - "weather/radar-functions/**"
       - "weather/public/assets/bydrrm-logo.png"
       - "weather/firebase.json"
       - ".github/workflows/bydrrm-weather-functions.yml"
@@ -37,9 +38,15 @@ jobs:
           NODE
           test -s weather/functions/assets/bydrrm-logo.png
           test -s weather/functions/logoData.js
-      - name: Install function dependencies
+      - name: Install advisory function dependencies
         working-directory: weather/functions
         run: npm install
+      - name: Install radar proxy dependencies
+        working-directory: weather/radar-functions
+        run: npm install
+      - name: Validate radar proxy source
+        working-directory: weather/radar-functions
+        run: node --check index.js
       - name: Build high-resolution Bulacan map
         working-directory: weather/functions
         run: |
