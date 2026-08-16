@@ -16,6 +16,7 @@ Modern Bulacan-focused weather advisory website + protected admin dashboard, des
 ## Included
 - `public/index.html` public live advisory page
 - `public/admin.html` operations dashboard
+- `public/radar.html` Bulacan Radar + Infrared Studio
 - Firebase Auth + Firestore client integration
 - Scheduled scanner every 5 minutes in Asia/Manila
 - PAGASA NCR-PRSD Heavy Rainfall parser
@@ -27,6 +28,28 @@ Modern Bulacan-focused weather advisory website + protected admin dashboard, des
 - Duplicate protection using advisory keys
 - Posting logs in `weather_advisories`
 - Emergency auto-post pause
+
+## Bulacan Radar + Infrared Studio
+The Radar Studio is available at `/radar.html` and uses the same BYDRRM logo already bundled with the Weather project.
+
+Features:
+- Bulacan-centered interactive map with municipal boundaries and a highlighted province outline
+- Layer modes: Radar (dBZ), Rain Rate (mm/hr), Infrared (°C), and Combined
+- Windy-inspired infrared palette: gray/green/yellow/orange/red/dark red while preserving correct scientific units
+- Embedded official PAGASA PANaHON radar viewer for live source reference
+- Local multi-frame image loading for PAGASA radar/satellite frames
+- Adjustable frame opacity and geographic bounds calibration
+- Timeline playback with previous/next controls
+- Clean branded PNG export for the current frame
+- Animated GIF export from up to 12 chronological frames
+- BYDRRM logo, timestamp, layer label, legend and DOST-PAGASA source attribution on exports
+
+### Important data-source behavior
+PANaHON publicly exposes Radar Mosaic, Hybrid Reflectivity, Rain Rate and Himawari IR in its interactive viewer, but this repository does not assume or invent an undocumented public machine-readable tile/image API. The page therefore keeps the official PANaHON viewer embedded as the live reference and accepts official image frames locally for BYDRRM overlay/export.
+
+When PAGASA provides or confirms a stable machine-readable radar/satellite endpoint suitable for third-party use, connect it in `public/assets/radar.js` and keep the current local-frame workflow as a manual fallback. Do not label third-party radar data as PAGASA data.
+
+Municipal boundaries are loaded from the open `faeldon/philippines-json-maps` dataset, with a built-in Bulacan province polygon fallback if the external boundary file is unavailable.
 
 ## Important: Facebook Page link
 Provided Page URL: https://www.facebook.com/share/195nV8wz7s/
