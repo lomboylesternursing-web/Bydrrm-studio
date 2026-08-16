@@ -1,0 +1,34 @@
+name: Radar Station Discovery
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/radar-station-discovery.yml'
+      - 'weather/**'
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect official PAGASA radar client
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAGE=$(mktemp)
+          curl -LfsS --max-time 30 'https://www.pagasa.dost.gov.ph/radar' -o "$PAGE"
+          echo '=== RADAR PAGE SCRIPT URLS ==='
+          grep -oE 'src="[^"]+\.js[^\"]*"' "$PAGE" | sed 's/src="//;s/"$//' | grep -Ei 'radar|map' || true
+          MAP_JS=$(grep -oE 'src="[^"]+\.js[^\"]*"' "$PAGE" | sed 's/src="//;s/"$//' | grep -Ei 'radar/.*/?map|app/radar/map' | head -1 || true)
+          if [ -z "$MAP_JS" ]; then
+            MAP_JS='/themes/hiraia/assets/js/app/radar/map.js'
+          fi
+          case "$MAP_JS" in
+            http*) URL="$MAP_JS" ;;
+            *) URL="https://www.pagasa.dost.gov.ph$MAP_JS" ;;
+          esac
+          echo "Using JS: $URL"
+          JS=$(mktemp)
+          curl -LfsS --max-time 30 "$URL" -o "$JS"
+          echo '=== API / STATION REFERENCES ==='
+          grep -Eio '.{0,120}(Baler|Subic|Benguet|Baguio|HybridTimeline|RadarStation|rainfall_estimate|reflectivity).{0,180}' "$JS" | head -100 || true
+          echo '=== END ==='
